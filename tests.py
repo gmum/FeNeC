@@ -1,16 +1,16 @@
 import time
 import unittest
 
+import numpy as np
+import scipy
 import sklearn
 import torch
 import torchvision
 from sklearn import datasets, neighbors, cluster
-import numpy as np
-import scipy
 
 import Metrics
-from KNNClassifier import KNNClassifier
 from KMeans import KMeans
+from KNNClassifier import KNNClassifier
 
 
 class TestMetrics(unittest.TestCase):
@@ -45,7 +45,7 @@ class TestMetrics(unittest.TestCase):
         a = torch.mean(D, 1).unsqueeze(1)
         b = torch.tensor([[2, 4]])
 
-        metric = Metrics.MahalanobisMetric()
+        metric = Metrics.MahalanobisMetric(normalization=False)
         metric.preprocess(D)
 
         dist_test = metric.calculate(a, b)
@@ -58,7 +58,7 @@ class TestMetrics(unittest.TestCase):
         a = torch.mean(D, 1).unsqueeze(1)
         b = torch.tensor([[2, 4], [-3, 0], [1, 2]])
 
-        metric = Metrics.MahalanobisMetric()
+        metric = Metrics.MahalanobisMetric(normalization=False)
         metric.preprocess(D)
 
         dist_test = metric.calculate(a, b)
@@ -82,7 +82,7 @@ class TestKNNClassifier(unittest.TestCase):
         # Create a moons dataset
         train_samples, test_samples = 2000, 1000
         noise = 0.2
-        n_neighbors = 5
+        n_neighbors = 1
 
         X_train, y_train = datasets.make_moons(n_samples=train_samples, noise=noise)
         X_train, y_train = torch.tensor(X_train, dtype=torch.float32), torch.tensor(y_train)
@@ -97,15 +97,20 @@ class TestKNNClassifier(unittest.TestCase):
         y_train = torch.tensor([[i] * D.size(1) for i in range(2)]).flatten()
 
         # Initialize my KNN and predict classes of some test samples
+        start = time.time()
         knn1 = KNNClassifier(n_neighbors=n_neighbors, metric=metric, device=device).fit(D)
         pred1 = knn1.predict(X_test.to(device))
+        print('my knn: ', time.time() - start, KNNClassifier.accuracy_score(y_test.to(device), pred1))
 
         if metric_sklearn != 'mahalanobis':
             # Initialize sklearn KNN and predict classes of some test samples
+            start = time.time()
             knn2 = neighbors.KNeighborsClassifier(n_neighbors=n_neighbors, weights='distance', algorithm='brute',
                                                   metric=metric_sklearn, n_jobs=-1).fit(X_train, y_train)
-            pred2 = torch.tensor(knn2.predict(X_test), dtype=torch.int32, device=device)
-            self.assertTrue(torch.equal(pred1, pred2))
+            pred2 = torch.tensor(knn2.predict(X_test), dtype=torch.int32)
+            print('sklearn knn: ', time.time() - start, sklearn.metrics.accuracy_score(y_test, pred2) * 100)
+
+            self.assertTrue(torch.equal(pred1.cpu(), pred2))
 
     def test_moons_sklearn_euclidean(self):
         self.moons_sklearn_helper(Metrics.EuclideanMetric(), 'euclidean')
@@ -170,10 +175,11 @@ class TestKNNClassifier(unittest.TestCase):
     def test_kmeans(self):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+        X = torch.tensor(sklearn.datasets.make_blobs(n_samples=10000, n_features=2, centers=15, cluster_std=0.5)[0])
+
+        # Alternatively:
         # test = torchvision.datasets.MNIST('/files/', train=False, download=True)
         # X = test.data.reshape(-1, 28 * 28).to(torch.float32)
-
-        X = torch.tensor(sklearn.datasets.make_blobs(n_samples=10000, n_features=2, centers=15, cluster_std=0.5)[0])
 
         similarities = []
         for _ in range(50):
@@ -188,9 +194,9 @@ class TestKNNClassifier(unittest.TestCase):
 
             similarities.append(similarity.item())
 
-        mean_simlilarity = np.array(similarities).mean()
-        print("My KMeans similarity to sklearn's one:", mean_simlilarity)
-        self.assertTrue(mean_simlilarity > 0.9)
+        mean_similarity = np.array(similarities).mean()
+        print("My KMeans similarity to sklearn's one:", mean_similarity)
+        self.assertTrue(mean_similarity > 0.9)
 
 
 if __name__ == '__main__':
