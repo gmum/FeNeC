@@ -35,14 +35,14 @@ def train(clf, folder_name, n_tasks, only_last=False, verbose=False):
     Trains a classifier on a series of tasks, optionally testing on the test set after each task.
 
     Parameters:
-     clf (object): The classifier model to train.
-     folder_name (str): Path to the folder containing the HDF5 task files.
-     n_tasks (int): Number of tasks to train on.
-     only_last (bool): If True, evaluate on the test set only for the last task. If False, evaluate on all tasks.
-     verbose (bool): If True, print task details and timing information.
+     - clf (Classifier.Classifier): The classifier model to train.
+     - folder_name (str): Path to the folder containing the HDF5 task files.
+     - n_tasks (int): Number of tasks to train on.
+     - only_last (bool): If True, evaluate on the test set only for the last task. If False, evaluate on all tasks.
+     - verbose (bool): If True, print task details and timing information.
 
     Returns:
-     float: The accuracy on the final task.
+     - float: The accuracy on the final task.
     """
     device = clf.device
 
@@ -64,18 +64,21 @@ def train(clf, folder_name, n_tasks, only_last=False, verbose=False):
             if verbose:
                 start = time.time()  # Track the time for performance analysis.
 
-            # Fit the classifier to the grouped data
-            clf.fit(D)
+            # Determine whether to train the classifier (if required) and later use it for prediction
+            should_predict = (not only_last or task_number == n_tasks - 1)
 
-            # Optionally predict and evaluate accuracy on the test set
-            if not only_last or task_number == n_tasks - 1:
+            # Fit the classifier to the grouped data
+            clf.fit(D, train=should_predict)
+
+            # If prediction is enabled, generate predictions and calculate accuracy on the test set
+            if should_predict:
                 pred = clf.predict(X_test)
                 accuracy = clf.accuracy_score(y_test, pred)
 
             if verbose:
                 end = time.time()
                 print(f'task {task_number}: (time: {(end - start):.4f}s)')
-                print(f"Paper accuracy: {f['info'].attrs['accuracy']:.4f}; My accuracy: {accuracy:.4f}")
+                print(f"FeCAM accuracy: {f['info'].attrs['accuracy']:.4f}; My accuracy: {accuracy:.4f}")
 
     return accuracy
 
@@ -86,13 +89,13 @@ def grid_search(objective, study_name, n_trials, sampler=optuna.samplers.TPESamp
     Performs a grid search over hyperparameters using Optuna.
 
     Parameters:
-     objective (function): Objective function for optimization.
-     study_name (str): Name of the Optuna study.
-     n_trials (int): Number of trials to run.
-     sampler (object): Optuna sampler for hyperparameter space exploration (default is TPE).
-     restart (bool): Whether to delete the previous study.
-     n_jobs (int): Number of parallel jobs to run during the search.
-     verbose (int): Verbosity level for logging.
+     - objective (function): Objective function for optimization.
+     - study_name (str): Name of the Optuna study.
+     - n_trials (int): Number of trials to run.
+     - sampler (object): Optuna sampler for hyperparameter space exploration (default is TPE).
+     - restart (bool): Whether to delete the previous study.
+     - n_jobs (int): Number of parallel jobs to run during the search.
+     - verbose (int): Verbosity level for logging.
     """
     # Set verbosity levels based on user input
     verbose_levels = [optuna.logging.CRITICAL, optuna.logging.ERROR, optuna.logging.WARNING,
@@ -178,11 +181,11 @@ def plot_hyperparameter(param_name, param_vals, accuracies, deg=2, ylim=True):
     Plots a scatter plot of hyperparameter values against accuracies and fits a polynomial.
 
     Parameters:
-     param_name (str): Name of the hyperparameter.
-     param_vals (list or array): Values of the hyperparameter.
-     accuracies (list or array): Corresponding accuracy values.
-     deg (int): Degree of the polynomial fit.s
-     ylim (bool): Whether to limit the y-axis based on data.
+     - param_name (str): Name of the hyperparameter.
+     - param_vals (list or array): Values of the hyperparameter.
+     - accuracies (list or array): Corresponding accuracy values.
+     - deg (int): Degree of the polynomial fit.s
+     - ylim (bool): Whether to limit the y-axis based on data.
     """
     # If specified, ignore accuracies to far from the mean
     if ylim:
@@ -210,10 +213,10 @@ def plot_hyperparameters(study_name, columns=3, deg=2, ylim=True):
     Plots multiple hyperparameter versus accuracy graphs from a CSV file with Optuna Study.
 
     Parameters:
-     study_name (str): Name of the study.
-     columns (int): Number of columns for the plot grid.
-     deg (int): Degree of polynomial fit for each hyperparameter plot.
-     ylim (bool): Whether to set y-axis limits based on accuracy distribution.
+     - study_name (str): Name of the study.
+     - columns (int): Number of columns for the plot grid.
+     - deg (int): Degree of polynomial fit for each hyperparameter plot.
+     - ylim (bool): Whether to set y-axis limits based on accuracy distribution.
     """
     df = load_from_csv(study_name)
     accuracies = df['value'].values
@@ -240,11 +243,11 @@ def print_results(study_name, only_important=True):
     Prints the sorted results of an Optuna study.
 
     Parameters:
-     study_name (str): Name of the study.
-     only_important (bool): If True, only prints the accuracy and hyperparameter values.
+     - study_name (str): Name of the study.
+     - only_important (bool): If True, only prints the accuracy and hyperparameter values.
 
     Returns:
-     pd.DataFrame: Sorted DataFrame with the top results.
+     - pd.DataFrame: Sorted DataFrame with the top results.
     """
     df = load_from_csv(study_name)
     df_sorted = df.sort_values(by=['value'], ascending=False)
