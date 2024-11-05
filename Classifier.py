@@ -54,23 +54,24 @@ class Classifier(abc.ABC):
         # Process the data:
         # self.D stores only the current task's data, with Tukey transformation applied.
         #  It will be used for preprocessing the metric and possibly in children classes
-        #  TODO: should it contain data after Tukey transformation, or not?
         # self.D_centroids stores the centroids across all tasks, with Tukey transformation
         #  and optional normalization applied. It will be used during prediction.
 
         D_centroids = D.clone()  # Clone the data, so that we can perform clustering without Tukey applied
 
-        self.D = D
-        D = self.apply_tukey(D)  # Apply Tukey transformation to current task data.
-        self.metric.preprocess(D)  # Preprocess for the distance metric.
+        self.D = self.apply_tukey(D)  # Apply Tukey transformation to current task data.
+        self.metric.preprocess(self.D)  # Preprocess for the distance metric.
 
         if self.kmeans is not None:
-            self.kmeans.metric_preprocess(D)  # Preprocess data for KMeans metric (used for Mahalanobis).
+            self.kmeans.metric_preprocess(self.D)  # Preprocess data for KMeans metric (used for Mahalanobis).
             D_centroids = self.kmeans.fit_predict(D_centroids)  # Perform KMeans clustering.
 
         D_centroids = self.apply_tukey(D_centroids)  # Apply Tukey transformation to centroids.
         if self.is_normalization:
             D_centroids = self.data_normalization(D_centroids)  # Normalize centroids if normalization is enabled.
+
+        if self.is_normalization:
+            self.D = self.data_normalization(self.D)  # Normalize the data if normalization is enabled.
 
         if self.is_first_fit:
             # On the first call: initialize parameters and store data
