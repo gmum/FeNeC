@@ -1,13 +1,13 @@
 import optuna
 
-from KNNClassifier import KNNClassifier
-from KMeans import KMeans
 import DatasetRun
 import Metrics
+from KMeans import KMeans
+from KNNClassifier import KNNClassifier
 
 device = DatasetRun.get_device()
 study_name = "dataset1"
-folder_name = './data/dataset1'
+folder_name = '../data/dataset1'
 
 # Study parameters:
 sampler = optuna.samplers.RandomSampler()  # Optuna sampler

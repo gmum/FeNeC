@@ -122,12 +122,13 @@ def grid_search(objective, study_name, n_trials, sampler=optuna.samplers.TPESamp
         print("Best accuracy: ", study.best_value)
 
 
-def save_to_csv(study_name, only_complete=True):
+def save_to_csv(study_name, path='./results/', only_complete=True):
     """
     Saves the results of the Optuna study to a CSV file.
 
     Parameters:
      study_name (str): Name of the Optuna study.
+     path (str): Path to the results folder
      only_complete (bool): If True, only include completed trials.
     """
     # Load Optuna study to Pandas DataFrame
@@ -143,24 +144,25 @@ def save_to_csv(study_name, only_complete=True):
         df.drop(df[df.state != 'COMPLETE'].index, inplace=True)
 
     # Save to CSV
-    df.to_csv(f"./results/{study_name}.csv", index=False)
+    df.to_csv(f"{path}{study_name}.csv", index=False)
 
 
-def load_from_csv(study_name):
+def load_from_csv(study_name, path='./results/'):
     """ Loads the results of an Optuna study from a CSV file. """
-    return pd.read_csv(f"./results/{study_name}.csv")
+    return pd.read_csv(f"{path}{study_name}.csv")
 
 
-def plot_accuracy_trials(study_name, ylim=True):
+def plot_accuracy_trials(study_name, path='./results/', ylim=True):
     """
     Plots accuracy over trials from a CSV file with Optuna Study.
 
     Parameters:
-     study_name (str): Name of the Optuna study.
-     ylim (bool): Whether to set the y-axis limits based on data spread.
+     - study_name (str): Name of the Optuna study.
+     - path (str): Path to the results' folder.
+     - ylim (bool): Whether to set the y-axis limits based on data spread.
     """
     # Load data from csv to Pandas DataFrame
-    df = load_from_csv(study_name)
+    df = load_from_csv(study_name, path)
     accuracies = df['value'].values
 
     # Plot the accuracies across trials
@@ -208,17 +210,18 @@ def plot_hyperparameter(param_name, param_vals, accuracies, deg=2, ylim=True):
     plt.grid(True)
 
 
-def plot_hyperparameters(study_name, columns=3, deg=2, ylim=True):
+def plot_hyperparameters(study_name, path='./results/', columns=3, deg=2, ylim=True):
     """
     Plots multiple hyperparameter versus accuracy graphs from a CSV file with Optuna Study.
 
     Parameters:
      - study_name (str): Name of the study.
+     - path (str): Path to the results' folder.
      - columns (int): Number of columns for the plot grid.
      - deg (int): Degree of polynomial fit for each hyperparameter plot.
      - ylim (bool): Whether to set y-axis limits based on accuracy distribution.
     """
-    df = load_from_csv(study_name)
+    df = load_from_csv(study_name, path)
     accuracies = df['value'].values
 
     params = []
@@ -238,18 +241,19 @@ def plot_hyperparameters(study_name, columns=3, deg=2, ylim=True):
     plt.show()
 
 
-def print_results(study_name, only_important=True):
+def print_results(study_name, path='./results/', only_important=True):
     """
     Prints the sorted results of an Optuna study.
 
     Parameters:
      - study_name (str): Name of the study.
+     - path (str): Path to the results' folder.
      - only_important (bool): If True, only prints the accuracy and hyperparameter values.
 
     Returns:
      - pd.DataFrame: Sorted DataFrame with the top results.
     """
-    df = load_from_csv(study_name)
+    df = load_from_csv(study_name, path)
     df_sorted = df.sort_values(by=['value'], ascending=False)
 
     # Optionally drop unimportant columns
