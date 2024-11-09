@@ -1,17 +1,18 @@
 import torch
-from sklearn.linear_model import LogisticRegression
 
 import Metrics
 from Classifier import Classifier
 from KMeans import KMeans
 
 
-class LogRegClassifier(Classifier):
-    def __init__(self, n_store=50, selection_method='random', metric_kmeans=Metrics.EuclideanMetric(), *args, **kwargs):
+class MLPClassifier(Classifier):
+    def __init__(self, model, n_store=50, selection_method='random', metric_kmeans=Metrics.EuclideanMetric(), *args,
+                 **kwargs):
         """
-        Initializes the LogRegClassifier.
+        Initializes the MLPClassifier.
 
         Parameters:
+         - model (object): A classifier model that has the functions fit() and predict() (like LogisticRegression).
          - n_store (int): Number of samples from each class in the current task to retain for the next tasks.
          - selection_method (str): Method for selecting samples. Options:
             * 'all': Retains all samples.
@@ -20,6 +21,7 @@ class LogRegClassifier(Classifier):
          - metric_kmeans (Metric.Metric): Optional metric used for KMeans clustering when selection_method is 'kmeans'.
         """
         super().__init__(*args, **kwargs)
+        self.model = model
         self.n_store = n_store
         self.selection_method = selection_method
         self.metric_kmeans = metric_kmeans
@@ -79,11 +81,11 @@ class LogRegClassifier(Classifier):
             # Generate labels for the classifier based on the number of classes
             y = torch.tensor([[i] * D_samples.size(1) for i in range(self.n_classes)], dtype=torch.float32).flatten()
 
-            # Train a logistic regression model on the distance-based features
-            self.reg = LogisticRegression(max_iter=1000, solver='lbfgs', n_jobs=-1).fit(X.cpu(), y.cpu())
+            # Train a classifier model on the distance-based features
+            self.model.fit(X.cpu(), y.cpu())
 
     def model_predict(self, distances):
         # Find the minimum distance between the test sample and the closest data point for each class
         values = self.minDist(distances)
         # Use the logistic regression model to predict the class based on these minimum distance values
-        return torch.tensor(self.reg.predict(values.cpu()), dtype=torch.float32, device=distances.device)
+        return torch.tensor(self.model.predict(values.cpu()), dtype=torch.float32, device=distances.device)
