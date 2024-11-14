@@ -19,7 +19,7 @@ class Metric(abc.ABC):
         """ Method for resetting the state of the metric after preprocessing it. """
         pass
 
-    def calculate_batch(self, fun, a, b, batch_size_a, batch_size_b):
+    def calculate_batch(self, fun, a, b, batch_size):
         """
         Calculates the batched distance between two tensors 'a' and 'b' and applies a function to the computed distances.
 
@@ -27,28 +27,21 @@ class Metric(abc.ABC):
          - fun (function): A function to apply to the computed distances.
          - a (torch.Tensor): The first tensor of shape [n_classes, samples_per_class, n_features].
          - b (torch.Tensor): The second tensor [n_samples_b, n_features].
-         - batch_size_a (int): The batch size for tensor 'a'. If set to -1, it uses the full size of 'a'.
-         - batch_size_b (int): The batch size for tensor 'b'. If set to -1, it uses the full size of 'b'.
+         - batch_size (int): The batch size for tensor 'b'. If set to -1, it uses the full size of 'b'.
 
         Returns:
          - torch.Tensor: The results of the function 'fun' applied to the distances between 'a' and 'b'.
         """
-        # Set batch size for 'a' to full size if specified as -1
-        if batch_size_a == -1:
-            batch_size_a = a.size(1)
         # Set batch size for 'b' to full size if specified as -1
-        if batch_size_b == -1:
-            batch_size_b = b.size(0)
+        if batch_size == -1:
+            batch_size = b.size(0)
 
         res = []
 
-        # Split tensor 'a' into batches along the second-to-last dimension
-        split_A = a[None, :, :, :].split(batch_size_a, dim=-2)
-
-        for batch_B in b[:, None, None, :].split(batch_size_b, dim=0):
+        for batch_b in b[:, None, None, :].split(batch_size, dim=0):
             # Compute distances between each batch of 'a' and 'batch_B', then reshape
-            distances = torch.cat([self.calculate(batch_A, batch_B) for batch_A in split_A], dim=-1).reshape(
-                batch_B.size(0), a.size(0), a.size(1))  # Shape: [batch_size_b, n_classes, samples_per_class]
+            # Shape of distances: [batch_size, n_classes, samples_per_class]
+            distances = self.calculate(a, batch_b).reshape(batch_b.size(0), a.size(0), a.size(1))
 
             # Apply the function to the calculated distances and append to results list
             res.append(fun(distances))

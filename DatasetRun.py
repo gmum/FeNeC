@@ -13,6 +13,8 @@ import optuna
 import pandas as pd
 import torch
 
+from MLPClassifier import MLPClassifier
+
 # Path to the Optuna database for storing study results
 OPTUNA_DB_PATH = 'sqlite:///./results/optuna_study.db'
 
@@ -68,7 +70,10 @@ def train(clf, folder_name, n_tasks, only_last=False, verbose=False):
             should_predict = (not only_last or task_number == n_tasks - 1)
 
             # Fit the classifier to the grouped data
-            clf.fit(D, train=should_predict)
+            if clf is MLPClassifier:
+                clf.fit(D, train=should_predict)
+            else:
+                clf.fit(D)
 
             # If prediction is enabled, generate predictions and calculate accuracy on the test set
             if should_predict:

@@ -25,11 +25,10 @@ class MLPClassifier(Classifier):
         self.n_store = n_store
         self.selection_method = selection_method
         self.metric_kmeans = metric_kmeans
-        self.is_first_fit = True
         self.D_samples = None
 
     @staticmethod
-    def minDist(distances):
+    def min_dist(distances):
         """
         Computes the minimum distance to the closest centroid for each class.
 
@@ -49,7 +48,7 @@ class MLPClassifier(Classifier):
         Trains the classifier on the current task data.
 
         Parameters:
-         - D (torch.Tensor): Training data for the current task.
+         - D (torch.Tensor): Training data for the current task. Used solely for passing to the base classifier.
          - train (bool): If True, trains the classifier; if False, only prepares data without training.
         """
         super().fit(D)
@@ -75,8 +74,8 @@ class MLPClassifier(Classifier):
         if train:
             # Compute distances between all samples from previous tasks (self.D_samples)
             #  and class centroids (self.D_centroids)
-            X = self.metric.calculate_batch(self.minDist, self.D_centroids, self.D_samples.flatten(0, 1),
-                                            self.batch_size_D, self.batch_size_X)
+            X = self.metric.calculate_batch(self.min_dist, self.D_centroids,
+                                            self.D_samples.flatten(0, 1), self.batch_size)
 
             # Generate labels for the classifier based on the number of classes
             y = torch.tensor([[i] * D_samples.size(1) for i in range(self.n_classes)], dtype=torch.float32).flatten()
@@ -86,6 +85,6 @@ class MLPClassifier(Classifier):
 
     def model_predict(self, distances):
         # Find the minimum distance between the test sample and the closest data point for each class
-        values = self.minDist(distances)
+        values = self.min_dist(distances)
         # Use the logistic regression model to predict the class based on these minimum distance values
         return torch.tensor(self.model.predict(values.cpu()), dtype=torch.float32, device=distances.device)

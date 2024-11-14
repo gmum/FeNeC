@@ -4,8 +4,7 @@ import torch
 
 
 class Classifier(abc.ABC):
-    def __init__(self, metric, is_normalization=False, tukey_lambda=1., kmeans=None, device='cpu',
-                 batch_size_X=1, batch_size_D=-1):
+    def __init__(self, metric, is_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=2):
         """
         Initializes the Classifier.
 
@@ -15,16 +14,14 @@ class Classifier(abc.ABC):
          - tukey_lambda (float): Lambda value for Tukey’s Ladder of Powers transformation.
          - kmeans (KMeans): Optional KMeans object for clustering, if used.
          - device (str): Device on which computations are performed ('cpu' or 'cuda').
-         - batch_size_X (int): Batch size for splitting test data. Used in prediction.
-         - batch_size_D (int): Batch size for splitting training data (-1 means no splitting). Used in prediction.
+         - batch_size (int): Batch size for splitting test data. Used in prediction.
         """
         self.metric = metric
         self.is_normalization = is_normalization
         self.tukey_lambda = tukey_lambda
         self.kmeans = kmeans
         self.device = device
-        self.batch_size_X = batch_size_X
-        self.batch_size_D = batch_size_D
+        self.batch_size = batch_size
         self.is_first_fit = True
 
     def apply_tukey(self, T):
@@ -34,7 +31,7 @@ class Classifier(abc.ABC):
         else:
             return torch.log(T)
 
-    def fit(self, D, train=True):
+    def fit(self, D):
         """
         Fits the model to the training data.
         It can be called multiple times (is_first_fit=True only on the first call).
@@ -44,8 +41,6 @@ class Classifier(abc.ABC):
          - D (torch.Tensor): Training data tensor of shape [n_classes, samples_per_class, n_features].
                            In subsequent calls, the samples_per_class and n_features dimensions
                            must match the initial call.
-         - train (bool): If True, trains the classifier; if False, only prepares data without training.
-                         Only viable in LogRegClassifier
         """
         if D.ndim == 2:
             D = D.unsqueeze(0)  # Ensure data has the correct shape.
@@ -54,8 +49,10 @@ class Classifier(abc.ABC):
         # Process the data:
         # self.D stores only the current task's data, with Tukey transformation applied.
         #  It will be used for preprocessing the metric and possibly in children classes
+        #  shape: [n_classes (only in this task), samples_per_class, n_features]
         # self.D_centroids stores the centroids across all tasks, with Tukey transformation
         #  and optional normalization applied. It will be used during prediction.
+        #  shape: [n_classes (across all tasks), n_centroids, n_features]
 
         D_centroids = D.clone()  # Clone the data, so that we can perform clustering without Tukey applied
 
@@ -92,7 +89,7 @@ class Classifier(abc.ABC):
         Abstract method for predicting class labels based on distances to training samples.
 
         Parameters:
-         - distances (Tensor): Distances of shape [batch_size_X, n_classes, batch_size_D].
+         - distances (Tensor): Distances of shape [batch_size, n_classes, n_centroids].
 
         Returns:
          - Tensor: Predicted class labels.
@@ -114,8 +111,7 @@ class Classifier(abc.ABC):
         if self.is_normalization:
             X = self.data_normalization(X)
 
-        return self.metric.calculate_batch(self.model_predict, self.D_centroids, X,
-                                           self.batch_size_D, self.batch_size_X)
+        return self.metric.calculate_batch(self.model_predict, self.D_centroids, X, self.batch_size)
 
     @staticmethod
     def data_normalization(T, epsilon=1e-8):
