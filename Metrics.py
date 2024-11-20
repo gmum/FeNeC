@@ -160,6 +160,7 @@ class MahalanobisMetric(Metric):
         Returns:
          - torch.Tensor: Mahalanobis distance between a and b. Shape [n_samples_b, n_classes, n_samples_a].
         """
+        
         a = a.reshape(1, self.n_classes, -1, self.n_features)
         b = b.reshape(-1, 1, 1, self.n_features)
 

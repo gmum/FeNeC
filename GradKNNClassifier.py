@@ -57,7 +57,6 @@ class GradKNNClassifier(Classifier):
             data = self.metric.calculate_batch(self.n_nearest_points, self.D_centroids,
                                                     data, self.batch_size)
 
-
         if self.mode == 0:
 
             alpha, a, b = parameters
@@ -91,7 +90,6 @@ class GradKNNClassifier(Classifier):
             batch_size, n_classes, n_points = data.shape
 
             data_log = torch.log(data + 1e-8)
-
             data_transformed = a[None, : ,None] + b[None, : ,None] * data_log
 
             data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
@@ -105,10 +103,6 @@ class GradKNNClassifier(Classifier):
             probabilities = F.softmax(logits, dim=-1)  # Shape [batch_size, n_classes]
             
             if is_predicting:
-                temp = torch.argmax(probabilities, dim=1)
-                print("First 100 values of temp:")
-                for i in range(min(100, len(temp))):
-                    print(temp[i].item())
                 return torch.argmax(probabilities, dim=1)
 
             return probabilities
@@ -156,10 +150,10 @@ class GradKNNClassifier(Classifier):
 
             if self.parameters is None:
                 #parameters = [torch.tensor(.3, requires_grad=True, device=self.device) for _ in range(D.size(0)*4)]
-                a_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
-                b_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
-                alpha_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
-                r_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                a_param = torch.tensor(torch.randn(self.D.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                b_param = torch.tensor(torch.randn(self.D.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                alpha_param = torch.tensor(torch.randn(self.D.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                r_param = torch.tensor(torch.randn(self.D.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
                 parameters = [alpha_param, a_param, b_param, r_param]   
             else:
                 #a_param.extend(torch.tensor(torch.randn(D.size(0)-a_param.size(0), requires_grad=True, device=self.device)))
@@ -168,10 +162,10 @@ class GradKNNClassifier(Classifier):
                 #r_param.extend(torch.tensor(torch.randn(D.size(0)-r_param.size(0), requires_grad=True, device=self.device)))
 
 
-                a_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
-                b_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
-                alpha_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
-                r_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                a_param = torch.tensor(torch.randn(self.D.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                b_param = torch.tensor(torch.randn(self.D.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                alpha_param = torch.tensor(torch.randn(self.D.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                r_param = torch.tensor(torch.randn(self.D.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
                 parameters = [alpha_param, a_param, b_param, r_param]
 
         # Prepare the DataLoader
@@ -183,13 +177,14 @@ class GradKNNClassifier(Classifier):
                                                  self.D[d_class], self.batch_size))
             y.append(torch.tensor([d_class] * self.D.size(1)))  # pewnie można zastąpić używając torch.repeat
         X, y = torch.cat(X), torch.cat(y)
+        X = X[:,-self.D.size(0):,:]
         # Wymiar X: [liczba wszystkich punktów w tym tasku, self.n_classes (łączna liczba klas), self.n_points]
         # Wymiar y: [liczba wszystkich punktów w tym tasku]
-        dataloader = DataLoader(TensorDataset(X, y), batch_size=1024, shuffle=True)
+        dataloader = DataLoader(TensorDataset(X, y), batch_size=512, shuffle=True)
 
         # Train the model
         # Jako optimizer Adam, pewnie lepiej zrobić z tego hiperparametr
-        optimizer = torch.optim.Adam(parameters, lr=1e-3)
+        optimizer = torch.optim.Adam(parameters, lr=1e-2)
         for epoch in range(self.num_epochs):
             epoch_loss = 0.0  # Track total loss for the epoch
             correct = 0       # Track correct predictions
@@ -218,9 +213,10 @@ class GradKNNClassifier(Classifier):
 
             # Calculate and display epoch metrics
             epoch_accuracy = 100.0 * correct / total
-            print(f"Epoch [{epoch + 1}/{self.num_epochs}] Summary: "
-                f"Loss = {epoch_loss / len(dataloader):.4f}, "
-                f"Accuracy = {epoch_accuracy:.2f}%\n")
+            if epoch % 100 == 0:
+                print(f"Epoch [{epoch + 1}/{self.num_epochs}] Summary: "
+                    f"Loss = {epoch_loss / len(dataloader):.4f}, "
+                    f"Accuracy = {epoch_accuracy:.2f}%\n")
 
 
         # Zapis parametrów modelu
@@ -231,7 +227,12 @@ class GradKNNClassifier(Classifier):
                 self.parameters = parameters
             else:
                 #self.parameters = torch.cat(self.parameters, parameters, dim=0)  # coś w tym stylu pewnie
-                self.parameters = parameters
+                self.parameters[0] = torch.cat((self.parameters[0], parameters[0]), dim=0)
+                self.parameters[1] = torch.cat((self.parameters[1], parameters[1]), dim=0)
+                self.parameters[2] = torch.cat((self.parameters[2], parameters[2]), dim=0)
+                self.parameters[3] = torch.cat((self.parameters[3], parameters[3]), dim=0)
+
+                #self.parameters = parameters
 
     def model_predict(self, distances):
         # TODO: Użyć przetrenowanego modelu i zwrócić tensor zawierający [batch_size == distances.size(0)] klas
