@@ -1,10 +1,12 @@
 import torch
+from torch.utils.data import DataLoader, TensorDataset
+import torch.nn.functional as F
 
 from Classifier import Classifier
 
 
 class GradKNNClassifier(Classifier):
-    def __init__(self, n_points=10, mode=0, num_epochs=100, *args, **kwargs):
+    def __init__(self, n_points=10, mode=0, num_epochs=100, kmeans=None, *args, **kwargs):
         """
         Initializes the GradKNNClassifier.
         TODO: usunąć polskie komentarze i dodać ładne angielskie do tego co się dzieje w kodzie + dokumentacja funkcji
@@ -21,19 +23,97 @@ class GradKNNClassifier(Classifier):
         self.n_points = n_points
         self.mode = mode
         self.num_epochs = num_epochs
+        self.kmeans = kmeans
         # TODO: jakaś przykładowa nazwa, nie wiem jak najlepiej trzymać te parametry modelu
         self.parameters = None
+    
 
     def criterion(self, predictions, target):
-        # TODO: zaimplementować (+ pewnie to będzie mogła być funkcja static)
-        return None
+        """
+        Calculates the loss function for the classifier.
 
-    def predict(self, data, parameters=None):
+        Parameters:
+            - predictions (torch.Tensor): Predictions made by the classifier. Shape: [batch_size, n_classes].
+            - target (torch.Tensor): True labels for the data. Shape: [batch_size].
+        
+        Returns:
+            - torch.Tensor: Loss value
+        
+        """
+        #target = target.float()
+        loss = F.cross_entropy(predictions, target)
+        return loss
+
+    def predict(self, data,is_predicting = True, parameters=None):
+
         # TODO: zaimplementować (nie wiem jak z parameters, czy trzeba podawać? ciężko mi powiedzieć na tym etapie)
         # Pewnie najcięższa rzecz do zaimplementowania, trzeba napisać ten wzór z LeakyRelu
         # 'data' pewnie wymiaru [batch_size, self.n_classes, self.n_points]
+        #print("D CENTORIDS",self.D_centroids.shape)
         if parameters is None:
             parameters = self.parameters
+
+        if is_predicting:
+            data = self.metric.calculate_batch(self.n_nearest_points, self.D_centroids,
+                                                    data, self.batch_size)
+
+
+        if self.mode == 0:
+
+            alpha, a, b = parameters
+            batch_size, n_classes, n_points = data.shape
+
+            # Initialize logits tensor of size [batch_size, n_classes]
+            data_log = torch.log(data + 1e-8)
+
+            data_transformed = a + b * data_log
+
+            data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
+
+            data_sum = data_activated.sum(dim=-1)
+
+            logits = alpha * data_sum
+        
+
+            # Apply softmax to normalize over classes
+            probabilities = F.softmax(logits, dim=-1)  # Shape [batch_size, n_classes]
+            
+            if is_predicting:
+                return torch.argmax(probabilities, dim=1)
+
+            return probabilities
+
+
+
+        
+        elif self.mode == 1:
+            alpha, a, b, r = parameters
+            batch_size, n_classes, n_points = data.shape
+
+            data_log = torch.log(data + 1e-8)
+
+            data_transformed = a[None, : ,None] + b[None, : ,None] * data_log
+
+            data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
+
+            data_sum = data_activated.sum(dim=-1)
+
+            logits = alpha[None, : ] * data_sum + r[None, :]
+        
+
+            # Apply softmax to normalize over classes
+            probabilities = F.softmax(logits, dim=-1)  # Shape [batch_size, n_classes]
+            
+            if is_predicting:
+                temp = torch.argmax(probabilities, dim=1)
+                print("First 100 values of temp:")
+                for i in range(min(100, len(temp))):
+                    print(temp[i].item())
+                return torch.argmax(probabilities, dim=1)
+
+            return probabilities
+
+                    
         return None
 
     def n_nearest_points(self, distances):
@@ -56,22 +136,43 @@ class GradKNNClassifier(Classifier):
         super().fit(D)
         # Access to self.D (data from the current task) and
         #  self.D_centroids (class centroids from all tasks) is now available
-
         # TODO: tylko taki generalny zarys
 
         parameters = []  # Nie wiem czy to jest optymalne, żeby to była zwykła tablica? Może torch.empty(0)
 
-        if self.parameters is None:
+        if self.mode == 0:
             # Pierwszy raz wywołujemy fit (pierwszy task)
             # TODO: (tylko przykład) zmienić to i w jakiś mądry sposób pewnie wybrać te początkowe
             # (chyba są funkcje w pytorch do tego)
-            alpha_param = torch.tensor(.3, requires_grad=True, device=self.device)
-            a_param = torch.tensor(.6, requires_grad=True, device=self.device)
-            b_param = torch.tensor(.9, requires_grad=True, device=self.device)
-            parameters = [alpha_param, a_param, b_param]
+            if self.parameters is None:
+                alpha_param = torch.tensor(-1., requires_grad=True, device=self.device)
+                a_param = torch.tensor(0., requires_grad=True, device=self.device)
+                b_param = torch.tensor(1., requires_grad=True, device=self.device)
+                parameters = [alpha_param, a_param, b_param]
+            else:
+                parameters = self.parameters
         if self.mode == 1:
             # Pewnie coś podobnego: dla mode == 1 trzeba za każdym razem nowe parametry dla każdej klasy
-            pass
+
+            if self.parameters is None:
+                #parameters = [torch.tensor(.3, requires_grad=True, device=self.device) for _ in range(D.size(0)*4)]
+                a_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                b_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                alpha_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                r_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                parameters = [alpha_param, a_param, b_param, r_param]   
+            else:
+                #a_param.extend(torch.tensor(torch.randn(D.size(0)-a_param.size(0), requires_grad=True, device=self.device)))
+                #b_param.extend(torch.tensor(torch.randn(D.size(0)-b_param.size(0), requires_grad=True, device=self.device)))
+                #alpha_param.extend(torch.tensor(torch.randn(D.size(0)-alpha_param.size(0), requires_grad=True, device=self.device)))
+                #r_param.extend(torch.tensor(torch.randn(D.size(0)-r_param.size(0), requires_grad=True, device=self.device)))
+
+
+                a_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                b_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                alpha_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                r_param = torch.tensor(torch.randn(self.D_centroids.size(0), requires_grad=True, device=self.device), requires_grad=True, device=self.device)
+                parameters = [alpha_param, a_param, b_param, r_param]
 
         # Prepare the DataLoader
         # TODO: czyli po prostu wziąć self.n_points najbliżsych punktów każdej klasy dla każdego punktu z obecnego
@@ -84,21 +185,43 @@ class GradKNNClassifier(Classifier):
         X, y = torch.cat(X), torch.cat(y)
         # Wymiar X: [liczba wszystkich punktów w tym tasku, self.n_classes (łączna liczba klas), self.n_points]
         # Wymiar y: [liczba wszystkich punktów w tym tasku]
-        dataloader = None
+        dataloader = DataLoader(TensorDataset(X, y), batch_size=1024, shuffle=True)
 
         # Train the model
         # Jako optimizer Adam, pewnie lepiej zrobić z tego hiperparametr
         optimizer = torch.optim.Adam(parameters, lr=1e-3)
         for epoch in range(self.num_epochs):
-            for data, target in dataloader:
+            epoch_loss = 0.0  # Track total loss for the epoch
+            correct = 0       # Track correct predictions
+            total = 0         # Track total samples
+            
+
+            for batch_idx, (data, target) in enumerate(dataloader):
                 # Forward pass
-                predictions = self.predict(data, parameters)
+                predictions = self.predict(data,False, parameters)
                 loss = self.criterion(predictions, target)
 
                 # Backward pass and optimization
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+
+                # Track loss
+                epoch_loss += loss.item()
+
+                # Calculate accuracy for the batch
+                _, predicted_classes = torch.max(predictions, dim=1)
+                #print(predicted_classes)
+                correct += (predicted_classes == target).sum().item()
+                total += target.size(0)
+
+
+            # Calculate and display epoch metrics
+            epoch_accuracy = 100.0 * correct / total
+            print(f"Epoch [{epoch + 1}/{self.num_epochs}] Summary: "
+                f"Loss = {epoch_loss / len(dataloader):.4f}, "
+                f"Accuracy = {epoch_accuracy:.2f}%\n")
+
 
         # Zapis parametrów modelu
         if self.mode == 0:
@@ -107,7 +230,8 @@ class GradKNNClassifier(Classifier):
             if self.parameters is None:
                 self.parameters = parameters
             else:
-                self.parameters = torch.cat(self.parameters, parameters, dim=0)  # coś w tym stylu pewnie
+                #self.parameters = torch.cat(self.parameters, parameters, dim=0)  # coś w tym stylu pewnie
+                self.parameters = parameters
 
     def model_predict(self, distances):
         # TODO: Użyć przetrenowanego modelu i zwrócić tensor zawierający [batch_size == distances.size(0)] klas
