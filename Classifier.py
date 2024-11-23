@@ -4,7 +4,7 @@ import torch
 
 
 class Classifier(abc.ABC):
-    def __init__(self, metric, is_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=2):
+    def __init__(self, metric, is_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=8):
         """
         Initializes the Classifier.
 

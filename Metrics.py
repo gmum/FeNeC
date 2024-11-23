@@ -32,6 +32,10 @@ class Metric(abc.ABC):
         Returns:
          - torch.Tensor: The results of the function 'fun' applied to the distances between 'a' and 'b'.
         """
+        # Add a dimension so that it is of shape [1, n_classes, samples_per_class, n_features].
+        if a.ndim == 3:
+            a = a.unsqueeze(0)
+
         # Set batch size for 'b' to full size if specified as -1
         if batch_size == -1:
             batch_size = b.size(0)
@@ -41,7 +45,7 @@ class Metric(abc.ABC):
         for batch_b in b[:, None, None, :].split(batch_size, dim=0):
             # Compute distances between each batch of 'a' and 'batch_B', then reshape
             # Shape of distances: [batch_size, n_classes, samples_per_class]
-            distances = self.calculate(a, batch_b).reshape(batch_b.size(0), a.size(0), a.size(1))
+            distances = self.calculate(a, batch_b).reshape(batch_b.size(0), a.size(1), a.size(2))
 
             # Apply the function to the calculated distances and append to results list
             res.append(fun(distances))
@@ -151,22 +155,21 @@ class MahalanobisMetric(Metric):
 
     def calculate(self, a, b):
         """
-        Calculate the squared Mahalanobis distance between tensors a and b.
+        Calculate the squared Mahalanobis distance between tensors a and b. The number of classes in tensor 'a' may
+        differ from the number of classes in 'self.inv_cov_matrix'. In that case, the Mahalanobis distance shall be
+        calculated using only the last 'a_n_classes'.
 
         Parameters:
-         - a (torch.Tensor): First tensor of shape [n_classes, n_samples_a, n_features].
-         - b (torch.Tensor): Second tensor of shape [n_samples_b, n_features].
+         - a (torch.Tensor): First tensor of shape [1, a_n_classes, n_samples_a, n_features].
+         - b (torch.Tensor): Second tensor of shape [n_samples_b, 1, 1, n_features].
 
         Returns:
-         - torch.Tensor: Mahalanobis distance between a and b. Shape [n_samples_b, n_classes, n_samples_a].
+         - torch.Tensor: Mahalanobis distance between a and b. Shape [n_samples_b, a_n_classes, n_samples_a].
         """
-        
-        a = a.reshape(1, self.n_classes, -1, self.n_features)
-        b = b.reshape(-1, 1, 1, self.n_features)
 
         # Compute the Mahalanobis distance
-        diff = b - a  # [n_samples_b, n_classes, n_samples_a, n_features]
-        return torch.einsum('abcd,bed,abce->abc', diff, self.inv_cov_matrix, diff)
+        diff = b - a  # [n_samples_b, a_n_classes, n_samples_a, n_features]
+        return torch.einsum('abcd,bed,abce->abc', diff, self.inv_cov_matrix[-a.size(1):], diff)
 
     def reset(self):
         self.is_first_preprocess = True
