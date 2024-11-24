@@ -77,8 +77,10 @@ def train(clf, folder_name, n_tasks, only_last=False, verbose=False):
 
             # If prediction is enabled, generate predictions and calculate accuracy on the test set
             if should_predict:
-                pred = clf.predict(X_test)
+                pred = clf.predict(X_test)  
                 accuracy = clf.accuracy_score(y_test, pred)
+                print(pred[:50])
+                print(y_test[:50])
 
             if verbose:
                 end = time.time()
