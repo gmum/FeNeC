@@ -4,8 +4,58 @@ from torch.utils.data import DataLoader, TensorDataset, random_split
 from Classifier import Classifier
 
 
+import csv
+import os
+
+def save_task_data(task, epoch, loss, alpha, a, b, r, filename="data.csv"):
+    """
+    Save task data to a CSV file. Creates the file if it doesn't exist.
+
+    Parameters:
+        task (str): The name of the task.
+        epoch (int): The current epoch.
+        alpha, a, b, r (torch.nn.Parameter): Torch parameters, their size can vary between tasks.
+        filename (str): The name of the CSV file to save data to (default is "data.csv").
+    """
+
+    filename = str(task) + "_" + filename
+    # Ensure inputs are torch.nn.Parameter and convert them to flat lists
+    for param_name, param in zip(["alpha", "a", "b", "r"], [alpha, a, b, r]):
+        if not isinstance(param, torch.nn.Parameter):
+            raise TypeError(f"{param_name} must be of type torch.nn.Parameter, but got {type(param)}")
+    
+    # Convert tensor data to lists
+    alpha_list = alpha.detach().numpy().tolist()
+    a_list = a.detach().numpy().tolist()
+    b_list = b.detach().numpy().tolist()
+    r_list = r.detach().numpy().tolist()
+
+    # Prepare data row
+    row = [task, epoch, loss] + alpha_list + a_list + b_list + r_list
+
+    # Check if the file exists and determine if a header is needed
+    file_exists = os.path.isfile(filename)
+    with open(filename, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        
+        # Write header if file is being created
+        if not file_exists:
+            header = (
+                ["task", "epoch", "loss"] +
+                [f"alpha_{i}" for i in range(len(alpha_list))] +
+                [f"a_{i}" for i in range(len(a_list))] +
+                [f"b_{i}" for i in range(len(b_list))] +
+                [f"r_{i}" for i in range(len(r_list))]
+            )
+            writer.writerow(header)
+        
+        # Write data row
+        writer.writerow(row)
+
+
+
 class GradKNNClassifier(Classifier):
-    def __init__(self, n_points=10, mode=0, num_epochs=100, kmeans=None, *args, **kwargs):
+    def __init__(self, n_points=10, mode=0, num_epochs=100, kmeans=None, lr = 1e-3, early_stop_patience = 10, *args, **kwargs):
         """
         Initializes the GradKNNClassifier.
 
@@ -21,7 +71,9 @@ class GradKNNClassifier(Classifier):
         self.mode = mode
         self.num_epochs = num_epochs
         self.kmeans = kmeans
-        # TODO: jakaś przykładowa nazwa, nie wiem jak najlepiej trzymać te parametry modelu
+        self.lr = lr
+        self.early_stop_patience = early_stop_patience
+
         self.parameters = None
 
     def net_predict(self, data, parameters=None):
@@ -76,18 +128,18 @@ class GradKNNClassifier(Classifier):
             # TODO: (tylko przykład) zmienić to i w jakiś mądry sposób pewnie wybrać te początkowe
             #  (chyba są funkcje w pytorch do tego) !!!!!! teraz zawsze jest -1, 0 i 1, chyba tak nie chcemy
             if self.parameters is None:        
-                alpha_param = torch.nn.Parameter(torch.tensor(-1., device=self.device))
-                a_param = torch.nn.Parameter(torch.tensor(0., device=self.device))
-                b_param = torch.nn.Parameter(torch.tensor(1., device=self.device))
+                alpha_param = torch.nn.Parameter(torch.randn(1, device=self.device))
+                a_param = torch.nn.Parameter(torch.randn(1, device=self.device))
+                b_param = torch.nn.Parameter(torch.randn(1, device=self.device))
                 parameters = [alpha_param, a_param, b_param]
             else:
                 parameters = self.parameters
         if self.mode == 1:
             # TODO: zmienić to na torch.Parameter i jakoś lepiej, masz dokładnie to samo w if i else
-            a_param = torch.nn.Parameter(torch.zeros(self.D.size(0), device=self.device))
-            b_param = torch.nn.Parameter(torch.ones(self.D.size(0), device=self.device))
-            alpha_param = torch.nn.Parameter(torch.full((self.D.size(0),), -1.0, device=self.device))
-            r_param = torch.nn.Parameter(torch.zeros(self.D.size(0), device=self.device))
+            a_param = torch.nn.Parameter(torch.randn(self.D.size(0), device=self.device))
+            b_param = torch.nn.Parameter(torch.randn(self.D.size(0), device=self.device))
+            alpha_param = torch.nn.Parameter(torch.randn(self.D.size(0), device=self.device))
+            r_param = torch.nn.Parameter(torch.randn(self.D.size(0), device=self.device))
             parameters = [alpha_param, a_param, b_param, r_param]
 
 
@@ -120,9 +172,9 @@ class GradKNNClassifier(Classifier):
 
         best_validation_loss = float('inf') 
         epochs_no_improve = 0
-        early_stop_patience = 10  # Number of epoch
+        self.early_stop_patience = 10  # Number of epoch
 
-        optimizer = torch.optim.Adam(parameters, lr=1e-3)
+        optimizer = torch.optim.Adam(parameters, lr=self.lr)
         for epoch in range(self.num_epochs):
             epoch_loss = 0.0  # Track total loss for the epoch
             correct = 0  # Track correct predictions
@@ -163,6 +215,8 @@ class GradKNNClassifier(Classifier):
             avg_valid_loss = valid_loss / len(valid_dataloader)
             valid_accuracy = 100.0 * valid_correct / valid_total
             
+            # Save task data
+            save_task_data(self.D_centroids.size(0),epoch, avg_valid_loss, parameters[0], parameters[1], parameters[2], parameters[3])
             
             if epoch % 20 == 0:
                 print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, Loss = {valid_loss / len(valid_dataloader):.4f},")
@@ -174,7 +228,7 @@ class GradKNNClassifier(Classifier):
                 epochs_no_improve += 1
 
             # Early stopping
-            if epochs_no_improve >= early_stop_patience:
+            if epochs_no_improve >= self.early_stop_patience:
                 print(f"Early stopping at epoch {epoch + 1}")
                 # Save the model's parameters
                 if self.mode == 0:
