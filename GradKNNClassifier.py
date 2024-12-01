@@ -1,11 +1,12 @@
+import csv
+import os
+
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset, random_split
+
 from Classifier import Classifier
 
-
-import csv
-import os
 
 def save_task_data(task, epoch, loss, alpha, a, b, r, filename="data.csv"):
     """
@@ -23,7 +24,7 @@ def save_task_data(task, epoch, loss, alpha, a, b, r, filename="data.csv"):
     for param_name, param in zip(["alpha", "a", "b", "r"], [alpha, a, b, r]):
         if not isinstance(param, torch.nn.Parameter):
             raise TypeError(f"{param_name} must be of type torch.nn.Parameter, but got {type(param)}")
-    
+
     # Convert tensor data to lists
     alpha_list = alpha.detach().numpy().tolist()
     a_list = a.detach().numpy().tolist()
@@ -37,25 +38,25 @@ def save_task_data(task, epoch, loss, alpha, a, b, r, filename="data.csv"):
     file_exists = os.path.isfile(filename)
     with open(filename, mode='a', newline='') as file:
         writer = csv.writer(file)
-        
+
         # Write header if file is being created
         if not file_exists:
             header = (
-                ["task", "epoch", "loss"] +
-                [f"alpha_{i}" for i in range(len(alpha_list))] +
-                [f"a_{i}" for i in range(len(a_list))] +
-                [f"b_{i}" for i in range(len(b_list))] +
-                [f"r_{i}" for i in range(len(r_list))]
+                    ["task", "epoch", "loss"] +
+                    [f"alpha_{i}" for i in range(len(alpha_list))] +
+                    [f"a_{i}" for i in range(len(a_list))] +
+                    [f"b_{i}" for i in range(len(b_list))] +
+                    [f"r_{i}" for i in range(len(r_list))]
             )
             writer.writerow(header)
-        
+
         # Write data row
         writer.writerow(row)
 
 
-
 class GradKNNClassifier(Classifier):
-    def __init__(self, n_points=10, mode=0, num_epochs=100, kmeans=None, lr = 1e-3, early_stop_patience = 10, *args, **kwargs):
+    def __init__(self, n_points=10, mode=0, num_epochs=100, kmeans=None, lr=1e-3, early_stop_patience=10,
+                 reg_type=1, reg_lambda=0.1, verbose=True, *args, **kwargs):
         """
         Initializes the GradKNNClassifier.
 
@@ -73,36 +74,35 @@ class GradKNNClassifier(Classifier):
         self.kmeans = kmeans
         self.lr = lr
         self.early_stop_patience = early_stop_patience
-
-        self.parameters = None
-
-    def net_predict(self, data, parameters=None):
-        if parameters is None:
-            parameters = self.parameters
-
+        self.reg_type = reg_type
+        self.reg_lambda = reg_lambda
+        self.verbose = verbose
+        self.parameters = torch.nn.ParameterDict()
         if self.mode == 0:
-            alpha, a, b = parameters
-            data_log = torch.log(data + 1e-16)
+            for parameter_name in ['alpha', 'a', 'b']:
+                self.parameters.update({parameter_name: torch.nn.Parameter(torch.randn(1, device=self.device))})
+        else:
+            for parameter_name in ['alpha', 'a', 'b', 'r']:
+                self.parameters.update({parameter_name: torch.nn.Parameter(torch.empty(0, device=self.device))})
+            self.original_parameters = self.parameters.copy()
 
-            data_transformed = a + b * data_log
+    def net_predict(self, data):
+        if self.mode == 0:
+            data_transformed = self.parameters['a'] + self.parameters['b'] * torch.log(data + 1e-16)
             data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
             data_sum = data_activated.sum(dim=-1)
-            logits = alpha * data_sum
-
+            logits = self.parameters['alpha'] * data_sum
             return logits
-        else:  # self.mode == 1
-            alpha, a, b, r = parameters
-            data_log = torch.log(data + 1e-8)
-
-            #print(a.shape, b.shape, data_log.shape, " shapes")
-            data_transformed = a[None, :, None] + b[None, :, None] * data_log
+        else:
+            data_transformed = (self.parameters['a'][None, :, None] + self.parameters['b'][None, :, None]
+                                * torch.log(data + 1e-16))
             data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
             data_sum = data_activated.sum(dim=-1)
-            logits = alpha[None, :] * data_sum + r[None, :]
-
+            logits = self.parameters['alpha'][None, :] * data_sum + self.parameters['r'][None, :]
             return logits
 
     def n_nearest_points(self, distances):
+        # TODO: zmienić opis
         # Funkcja do użycia w tworzeniu datasetu (i chyba przy predict)
         #  - znajduje self.n_points najbliższych punktów z każdej klasy
         # Wymiar distances: [batch_size, n_classes, samples_per_class (czyli przy użyciu kmeansów: n_centroids)]
@@ -110,6 +110,25 @@ class GradKNNClassifier(Classifier):
         # Czy powinny być posortowane te punkty? ma to jakieś znacznie? Podobnie w model_predict
         return torch.topk(distances, self.n_points, sorted=True, largest=False)[0]
         # Return shape: [batch_size, self.n_classes, self.n_points]
+
+    def save_original_parameters(self):
+        # Save original parameters for later use in calculating the regularization
+        if self.mode == 1:
+            for parameter in ['alpha', 'a', 'b', 'r']:
+                self.original_parameters[parameter] = torch.nn.Parameter(torch.cat(
+                    [self.original_parameters[parameter], self.parameters[parameter][-self.D.size(0):]], dim=0))
+
+    def regularization(self):
+        if self.mode == 1:
+            prev_num_classes = len(self.original_parameters['a'])
+            for parameter in ['alpha', 'a', 'b', 'r']:
+                diff = (self.parameters[parameter][:prev_num_classes]
+                        - self.original_parameters[parameter])
+                if self.reg_type == 1:
+                    return self.reg_lambda * torch.sum(torch.abs(diff))
+                else:
+                    return self.reg_lambda * torch.sum(diff ** 2)
+        return 0
 
     def fit(self, D):
         """
@@ -121,35 +140,25 @@ class GradKNNClassifier(Classifier):
         super().fit(D)
         # Access to self.D (data from the current task) and
         #  self.D_centroids (class centroids from all tasks) is now available
-        parameters = []  # Nie wiem czy to jest optymalne, żeby to była zwykła tablica? Może torch.empty(0)
 
-        if self.mode == 0:
-            # Pierwszy raz wywołujemy fit (pierwszy task)
-            # TODO: (tylko przykład) zmienić to i w jakiś mądry sposób pewnie wybrać te początkowe
-            #  (chyba są funkcje w pytorch do tego) !!!!!! teraz zawsze jest -1, 0 i 1, chyba tak nie chcemy
-            if self.parameters is None:        
-                alpha_param = torch.nn.Parameter(torch.randn(1, device=self.device))
-                a_param = torch.nn.Parameter(torch.randn(1, device=self.device))
-                b_param = torch.nn.Parameter(torch.randn(1, device=self.device))
-                parameters = [alpha_param, a_param, b_param]
-            else:
-                parameters = self.parameters
+        # Create the new parameters to train (or in the case of mode 0 and consequential task, use previous ones)
         if self.mode == 1:
-            # TODO: zmienić to na torch.Parameter i jakoś lepiej, masz dokładnie to samo w if i else
-            a_param = torch.nn.Parameter(torch.randn(self.D.size(0), device=self.device))
-            b_param = torch.nn.Parameter(torch.randn(self.D.size(0), device=self.device))
-            alpha_param = torch.nn.Parameter(torch.randn(self.D.size(0), device=self.device))
-            r_param = torch.nn.Parameter(torch.randn(self.D.size(0), device=self.device))
-            parameters = [alpha_param, a_param, b_param, r_param]
-
+            for parameter in ['alpha', 'a', 'b', 'r']:
+                self.parameters[parameter] = torch.nn.Parameter(torch.cat(
+                    [self.parameters[parameter], torch.nn.Parameter(torch.randn(self.D.size(0), device=self.device))],
+                    dim=0))
 
         # Prepare the DataLoader
-        X = []
-        for d_class in range(D.size(0)):
-            X.append(self.metric.calculate_batch(self.n_nearest_points, self.D_centroids[-self.D.size(0):],
-                                                 self.D[d_class], self.batch_size))
-        X = torch.cat(X)  # Shape: [points in the current task, classes in the current task, self.n_points]
-        y = torch.arange(self.D.size(0)).repeat_interleave(self.D.size(1)).to(self.device)
+        D_clip = -self.D.size(0) if self.mode == 0 else 0
+        X = torch.cat([self.metric.calculate_batch(
+            self.n_nearest_points,
+            self.D_centroids[D_clip:],
+            d_class,
+            self.batch_size)
+            for d_class in self.D])  # Shape: [points in the current task, classes in the current task, self.n_points]
+        y = torch.arange(self.D.size(0)) if self.mode == 0 \
+            else torch.arange(self.D_centroids.size(0) - self.D.size(0), self.D_centroids.size(0))
+        y = y.repeat_interleave(self.D.size(1)).to(self.device)
         dataset = TensorDataset(X, y)
 
         # Define the split ratio
@@ -163,18 +172,13 @@ class GradKNNClassifier(Classifier):
         # Create DataLoaders for training and validation
         train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
         valid_dataloader = DataLoader(valid_dataset, batch_size=64, shuffle=False)
-
-        print("Dataloader created")
+        if self.verbose:
+            print("Dataloader created")
 
         # Train the model
-        # TODO: Jako optimizer Adam, pewnie lepiej zrobić z tego hiperparametr
-
-
-        best_validation_loss = float('inf') 
+        best_validation_loss = float('inf')
         epochs_no_improve = 0
-        self.early_stop_patience = 10  # Number of epoch
-
-        optimizer = torch.optim.Adam(parameters, lr=self.lr)
+        optimizer = torch.optim.Adam(self.parameters.parameters(), lr=self.lr)
         for epoch in range(self.num_epochs):
             epoch_loss = 0.0  # Track total loss for the epoch
             correct = 0  # Track correct predictions
@@ -182,8 +186,9 @@ class GradKNNClassifier(Classifier):
 
             for data, target in train_dataloader:
                 # Forward pass
-                predictions = self.net_predict(data, parameters)
+                predictions = self.net_predict(data)
                 loss = F.cross_entropy(predictions, target)
+                loss += self.regularization()
 
                 # Backward pass and optimization
                 optimizer.zero_grad()
@@ -205,23 +210,24 @@ class GradKNNClassifier(Classifier):
             valid_loss = 0.0
             with torch.no_grad():
                 for data, target in valid_dataloader:
-                    predictions = self.net_predict(data, parameters)
+                    predictions = self.net_predict(data)
                     predicted_classes = torch.argmax(predictions, dim=1)
                     valid_correct += (predicted_classes == target).sum().item()
                     valid_total += target.size(0)
-                    
-                    loss = F.cross_entropy(predictions, target)
-                    valid_loss += loss.item()
+                    valid_loss += F.cross_entropy(predictions, target).item()
             avg_valid_loss = valid_loss / len(valid_dataloader)
             valid_accuracy = 100.0 * valid_correct / valid_total
-            
-            # Save task data
-            save_task_data(self.D_centroids.size(0),epoch, avg_valid_loss, parameters[0], parameters[1], parameters[2], parameters[3])
-            
-            if epoch % 20 == 0:
-                print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, Loss = {valid_loss / len(valid_dataloader):.4f},")
+
+            if self.verbose:
+                # Save task data (TODO)
+                # save_task_data(self.D_centroids.size(0), epoch, avg_valid_loss, parameters)
+                if epoch % 20 == 0:
+                    print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
+                          f"Loss = {valid_loss / len(valid_dataloader):.4f},")
 
             if avg_valid_loss < best_validation_loss:
+                # torch.save(parameters.state_dict(), "parameters.pth") # TODO
+                # save_task_data(self.D_centroids.size(0), epoch, avg_valid_loss, parameters)
                 best_validation_loss = avg_valid_loss
                 epochs_no_improve = 0
             else:
@@ -230,29 +236,11 @@ class GradKNNClassifier(Classifier):
             # Early stopping
             if epochs_no_improve >= self.early_stop_patience:
                 print(f"Early stopping at epoch {epoch + 1}")
-                # Save the model's parameters
-                if self.mode == 0:
-                    self.parameters = parameters
-                elif self.mode == 1:
-                    if self.parameters is None:
-                        self.parameters = parameters
-                    else:
-                        self.parameters[0] = torch.cat((self.parameters[0], parameters[0]), dim=0)
-                        self.parameters[1] = torch.cat((self.parameters[1], parameters[1]), dim=0)
-                        self.parameters[2] = torch.cat((self.parameters[2], parameters[2]), dim=0)
-                        self.parameters[3] = torch.cat((self.parameters[3], parameters[3]), dim=0)
-                
+                # parameters.load_state_dict(torch.load("parameters.pth"))
+                self.save_original_parameters()
                 return
-        if self.mode == 0:
-            self.parameters = parameters
-        elif self.mode == 1:
-            if self.parameters is None:
-                self.parameters = parameters
-            else:
-                self.parameters[0] = torch.cat((self.parameters[0], parameters[0]), dim=0)
-                self.parameters[1] = torch.cat((self.parameters[1], parameters[1]), dim=0)
-                self.parameters[2] = torch.cat((self.parameters[2], parameters[2]), dim=0)
-                self.parameters[3] = torch.cat((self.parameters[3], parameters[3]), dim=0)
+        self.save_original_parameters()
 
     def model_predict(self, distances):
-        return torch.argmax(self.net_predict(self.n_nearest_points(distances)), -1)
+        with torch.no_grad():
+            return torch.argmax(self.net_predict(self.n_nearest_points(distances)), -1)
