@@ -8,28 +8,38 @@ from torch.utils.data import DataLoader, TensorDataset, random_split
 from Classifier import Classifier
 
 
-def save_task_data(task, epoch, loss, alpha, a, b, r, filename="data.csv"):
+def save_task_data(task, epoch, loss, parameters, filename="data.csv"):
     """
-    Save task data to a CSV file. Creates the file if it doesn't exist.
+    Save task data to a CSV file. Appends to an existing file or creates a new one.
 
     Parameters:
         task (str): The name of the task.
         epoch (int): The current epoch.
+        loss (float): Loss value for the epoch.
         alpha, a, b, r (torch.nn.Parameter): Torch parameters, their size can vary between tasks.
         filename (str): The name of the CSV file to save data to (default is "data.csv").
     """
+    all_classes = 100  # Fixed size for parameter lists
+    alpha = parameters["alpha"]
+    a = parameters["a"]
+    b = parameters["b"]
+    r = parameters["r"]
 
-    filename = str(task) + "_" + filename
-    # Ensure inputs are torch.nn.Parameter and convert them to flat lists
-    for param_name, param in zip(["alpha", "a", "b", "r"], [alpha, a, b, r]):
-        if not isinstance(param, torch.nn.Parameter):
-            raise TypeError(f"{param_name} must be of type torch.nn.Parameter, but got {type(param)}")
 
-    # Convert tensor data to lists
-    alpha_list = alpha.detach().numpy().tolist()
-    a_list = a.detach().numpy().tolist()
-    b_list = b.detach().numpy().tolist()
-    r_list = r.detach().numpy().tolist()
+    # Validate parameter types
+    #for param_name, param in zip(["alpha", "a", "b", "r"], [alpha, a, b, r]):
+    #    if not isinstance(param, torch.nn.Parameter):
+    #        raise TypeError(f"{param_name} must be of type torch.nn.Parameter, but got {type(param)}")
+    
+    # Convert parameters to lists and pad to all_classes with zeros
+    def pad_to_all_classes(param):
+        param_list = param.detach().numpy().tolist()
+        return param_list + [0] * (all_classes - len(param_list))
+    
+    alpha_list = pad_to_all_classes(alpha)
+    a_list = pad_to_all_classes(a)
+    b_list = pad_to_all_classes(b)
+    r_list = pad_to_all_classes(r)
 
     # Prepare data row
     row = [task, epoch, loss] + alpha_list + a_list + b_list + r_list
@@ -38,25 +48,25 @@ def save_task_data(task, epoch, loss, alpha, a, b, r, filename="data.csv"):
     file_exists = os.path.isfile(filename)
     with open(filename, mode='a', newline='') as file:
         writer = csv.writer(file)
-
-        # Write header if file is being created
+        
+        # Write header if the file does not exist
         if not file_exists:
             header = (
-                    ["task", "epoch", "loss"] +
-                    [f"alpha_{i}" for i in range(len(alpha_list))] +
-                    [f"a_{i}" for i in range(len(a_list))] +
-                    [f"b_{i}" for i in range(len(b_list))] +
-                    [f"r_{i}" for i in range(len(r_list))]
+                ["task", "epoch", "loss"] +
+                [f"alpha_{i}" for i in range(all_classes)] +
+                [f"a_{i}" for i in range(all_classes)] +
+                [f"b_{i}" for i in range(all_classes)] +
+                [f"r_{i}" for i in range(all_classes)]
             )
             writer.writerow(header)
-
-        # Write data row
+        
+        # Write the data row
         writer.writerow(row)
 
 
 class GradKNNClassifier(Classifier):
-    def __init__(self, n_points=10, mode=0, num_epochs=100, kmeans=None, lr=1e-3, early_stop_patience=10,
-                 reg_type=1, reg_lambda=0.1, verbose=True, *args, **kwargs):
+    def __init__(self, n_points=10, mode=0, num_epochs=100, kmeans=None, lr=1e-3, early_stop_patience=10,use_regularization=True,
+                 reg_type=1, reg_lambda=0.1, use_sigmoid = True, sigmoidx = 2, verbose=True, *args, **kwargs):
         """
         Initializes the GradKNNClassifier.
 
@@ -76,6 +86,9 @@ class GradKNNClassifier(Classifier):
         self.early_stop_patience = early_stop_patience
         self.reg_type = reg_type
         self.reg_lambda = reg_lambda
+        self.use_regularization = use_regularization
+        self.use_sigmoid = use_sigmoid
+        self.sigmoidx = sigmoidx
         self.verbose = verbose
         self.parameters = torch.nn.ParameterDict()
         if self.mode == 0:
@@ -86,21 +99,34 @@ class GradKNNClassifier(Classifier):
                 self.parameters.update({parameter_name: torch.nn.Parameter(torch.empty(0, device=self.device))})
             self.original_parameters = self.parameters.copy()
 
+
+
     def net_predict(self, data):
+        parameters = self.parameters
+
+
         if self.mode == 0:
-            data_transformed = self.parameters['a'] + self.parameters['b'] * torch.log(data + 1e-16)
+            data_transformed = parameters['a'] + parameters['b'] * torch.log(data + 1e-16)
             data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
             data_sum = data_activated.sum(dim=-1)
-            logits = self.parameters['alpha'] * data_sum
+            logits =  F.softplus(parameters['alpha']) * data_sum
             return logits
         else:
-            data_transformed = (self.parameters['a'][None, :, None] + self.parameters['b'][None, :, None]
-                                * torch.log(data + 1e-16))
-            data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
-            data_sum = data_activated.sum(dim=-1)
-            logits = self.parameters['alpha'][None, :] * data_sum + self.parameters['r'][None, :]
+            if self.use_sigmoid:
+                data_transformed = ((F.sigmoid(parameters['a']) * self.sigmoidx - self.sigmoidx / 2)[None, :, None] +
+                                    (F.sigmoid(parameters['b']) * self.sigmoidx - self.sigmoidx / 2)[None, :, None] * torch.log(data + 1e-16))
+                data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
+                data_sum = data_activated.sum(dim=-1)
+                logits = F.softplus((F.sigmoid(parameters['alpha']) * self.sigmoidx - self.sigmoidx / 2)[None, :]) * data_sum + \
+                        (F.sigmoid(parameters['r']) * self.sigmoidx - self.sigmoidx / 2)[None, :]
+            else:
+                data_transformed = ((parameters['a'])[None, :, None] +
+                                    (parameters['b'])[None, :, None] * torch.log(data + 1e-16))
+                data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
+                data_sum = data_activated.sum(dim=-1)
+                logits = F.softplus((parameters['alpha'])[None, :]) * data_sum + \
+                        (parameters['r'])[None, :]
             return logits
-
     def n_nearest_points(self, distances):
         # TODO: zmienić opis
         # Funkcja do użycia w tworzeniu datasetu (i chyba przy predict)
@@ -118,15 +144,17 @@ class GradKNNClassifier(Classifier):
                 self.original_parameters[parameter] = torch.nn.Parameter(torch.cat(
                     [self.original_parameters[parameter], self.parameters[parameter][-self.D.size(0):]], dim=0))
 
-    def regularization(self):
+    def regularization(self): #zapisac osobno loss cross entropy i regularization podczas kolejnych epok
         if self.mode == 1:
             prev_num_classes = len(self.original_parameters['a'])
             for parameter in ['alpha', 'a', 'b', 'r']:
                 diff = (self.parameters[parameter][:prev_num_classes]
                         - self.original_parameters[parameter])
                 if self.reg_type == 1:
+                # L1 regularization
                     return self.reg_lambda * torch.sum(torch.abs(diff))
                 else:
+                # L2 regularization
                     return self.reg_lambda * torch.sum(diff ** 2)
         return 0
 
@@ -170,11 +198,22 @@ class GradKNNClassifier(Classifier):
         train_dataset, valid_dataset = random_split(dataset, [train_size, valid_size])
 
         # Create DataLoaders for training and validation
-        train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-        valid_dataloader = DataLoader(valid_dataset, batch_size=64, shuffle=False)
+        train_dataloader = DataLoader(train_dataset, batch_size=256, shuffle=True)
+        valid_dataloader = DataLoader(valid_dataset, batch_size=256, shuffle=False)
         if self.verbose:
             print("Dataloader created")
 
+
+        x = self.D_centroids.size(0)-self.D.size(0)  # Number of elements to freeze in each parameter
+
+        # Register hooks to freeze the first `x` elements
+        if(self.use_regularization == False):
+            for name, param in self.parameters.items():
+                def hook_fn(grad, num_freeze=x):
+                    # Zero out the gradient for the first `x` elements
+                    grad[:num_freeze] = 0
+                    return grad
+                param.register_hook(lambda grad: hook_fn(grad, x))
         # Train the model
         best_validation_loss = float('inf')
         epochs_no_improve = 0
@@ -194,6 +233,8 @@ class GradKNNClassifier(Classifier):
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+
+                
 
                 # Track loss
                 epoch_loss += loss.item()
@@ -220,12 +261,12 @@ class GradKNNClassifier(Classifier):
 
             if self.verbose:
                 # Save task data (TODO)
-                # save_task_data(self.D_centroids.size(0), epoch, avg_valid_loss, parameters)
+                save_task_data(self.D_centroids.size(0), epoch, avg_valid_loss, self.parameters)
                 if epoch % 20 == 0:
                     print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
                           f"Loss = {valid_loss / len(valid_dataloader):.4f},")
 
-            if avg_valid_loss < best_validation_loss:
+            if avg_valid_loss< best_validation_loss:
                 # torch.save(parameters.state_dict(), "parameters.pth") # TODO
                 # save_task_data(self.D_centroids.size(0), epoch, avg_valid_loss, parameters)
                 best_validation_loss = avg_valid_loss

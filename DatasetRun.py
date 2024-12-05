@@ -79,6 +79,8 @@ def train(clf, folder_name, n_tasks, only_last=False, verbose=False):
             if should_predict:
                 pred = clf.predict(X_test)
                 accuracy = clf.accuracy_score(y_test, pred)
+                print(y_test[:100])
+                print(pred[:100])
 
             if verbose:
                 end = time.time()
