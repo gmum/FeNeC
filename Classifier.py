@@ -1,6 +1,8 @@
 import abc
 
+import pandas as pd
 import torch
+from sklearn.metrics import precision_recall_fscore_support as score
 
 
 class Classifier(abc.ABC):
@@ -31,7 +33,7 @@ class Classifier(abc.ABC):
         else:
             return torch.log(T)
 
-    def fit(self, D):
+    def fit(self, D, **kwargs):
         """
         Fits the model to the training data.
         It can be called multiple times (is_first_fit=True only on the first call).
@@ -152,6 +154,27 @@ class Classifier(abc.ABC):
         return torch.stack([torch.stack(D[i]) for i in range(n_classes)]).type(torch.float32).to(X.device)
 
     @staticmethod
-    def accuracy_score(y_true, pred):
+    def accuracy_score(y_true, pred, verbose=False):
         """ Calculates the accuracy score. """
+
+        if verbose:
+            task_y_true = y_true // 10
+            task_pred = pred // 10
+            precision, recall, fscore, support = score(task_y_true.detach().cpu().numpy(),
+                                                       task_pred.detach().cpu().numpy())
+
+            tasks = sorted(set(task_y_true.detach().cpu().numpy()))
+            # Create DataFrame for formatted output
+            data = {
+                "Task": tasks,
+                "% of all Answers": [f"{((task_pred == task).sum() + 1e-16) / len(task_pred) * 100:.0f}%" for task in
+                                     tasks],
+                "Precision": [f"{p * 100:.0f}%" for p in precision],
+                "Recall": [f"{r * 100:.0f}%" for r in recall],
+                "FScore": [f"{f:.2f}" for f in fscore],
+            }
+
+            df = pd.DataFrame(data)
+            print(df.to_markdown(index=False))
+
         return torch.sum(torch.eq(y_true, pred)).item() / len(y_true) * 100

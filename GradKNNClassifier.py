@@ -25,17 +25,16 @@ def save_task_data(task, epoch, loss, parameters, filename="data.csv"):
     b = parameters["b"]
     r = parameters["r"]
 
-
     # Validate parameter types
-    #for param_name, param in zip(["alpha", "a", "b", "r"], [alpha, a, b, r]):
+    # for param_name, param in zip(["alpha", "a", "b", "r"], [alpha, a, b, r]):
     #    if not isinstance(param, torch.nn.Parameter):
     #        raise TypeError(f"{param_name} must be of type torch.nn.Parameter, but got {type(param)}")
-    
+
     # Convert parameters to lists and pad to all_classes with zeros
     def pad_to_all_classes(param):
-        param_list = param.detach().numpy().tolist()
+        param_list = param.detach().cpu().numpy().tolist()
         return param_list + [0] * (all_classes - len(param_list))
-    
+
     alpha_list = pad_to_all_classes(alpha)
     a_list = pad_to_all_classes(a)
     b_list = pad_to_all_classes(b)
@@ -48,25 +47,26 @@ def save_task_data(task, epoch, loss, parameters, filename="data.csv"):
     file_exists = os.path.isfile(filename)
     with open(filename, mode='a', newline='') as file:
         writer = csv.writer(file)
-        
+
         # Write header if the file does not exist
         if not file_exists:
             header = (
-                ["task", "epoch", "loss"] +
-                [f"alpha_{i}" for i in range(all_classes)] +
-                [f"a_{i}" for i in range(all_classes)] +
-                [f"b_{i}" for i in range(all_classes)] +
-                [f"r_{i}" for i in range(all_classes)]
+                    ["task", "epoch", "loss"] +
+                    [f"alpha_{i}" for i in range(all_classes)] +
+                    [f"a_{i}" for i in range(all_classes)] +
+                    [f"b_{i}" for i in range(all_classes)] +
+                    [f"r_{i}" for i in range(all_classes)]
             )
             writer.writerow(header)
-        
+
         # Write the data row
         writer.writerow(row)
 
 
 class GradKNNClassifier(Classifier):
-    def __init__(self, n_points=10, mode=0, num_epochs=100, kmeans=None, lr=1e-3, early_stop_patience=10,use_regularization=True,
-                 reg_type=1, reg_lambda=0.1, use_sigmoid = True, sigmoidx = 2, verbose=True, *args, **kwargs):
+    def __init__(self, n_points=10, mode=0, num_epochs=100, kmeans=None, lr=1e-3, early_stop_patience=10,
+                 train_previous=True, reg_type=1, reg_lambda=0.1, use_sigmoid=False, sigmoidx=2, verbose=True,
+                 when_norm=0, norm_type=0, task0_type=0, *args, **kwargs):
         """
         Initializes the GradKNNClassifier.
 
@@ -86,7 +86,7 @@ class GradKNNClassifier(Classifier):
         self.early_stop_patience = early_stop_patience
         self.reg_type = reg_type
         self.reg_lambda = reg_lambda
-        self.use_regularization = use_regularization
+        self.train_previous = train_previous
         self.use_sigmoid = use_sigmoid
         self.sigmoidx = sigmoidx
         self.verbose = verbose
@@ -98,67 +98,83 @@ class GradKNNClassifier(Classifier):
             for parameter_name in ['alpha', 'a', 'b', 'r']:
                 self.parameters.update({parameter_name: torch.nn.Parameter(torch.empty(0, device=self.device))})
             self.original_parameters = self.parameters.copy()
+        self.task_boundaries = torch.tensor([0])
 
+        self.when_norm = when_norm
+        self.norm_type = norm_type
+        self.task0_type = task0_type
 
-
-    def net_predict(self, data):
+    def net_predict(self, data, normalize=True):
         parameters = self.parameters
-
 
         if self.mode == 0:
             data_transformed = parameters['a'] + parameters['b'] * torch.log(data + 1e-16)
             data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
             data_sum = data_activated.sum(dim=-1)
-            logits =  F.softplus(parameters['alpha']) * data_sum
+            logits = F.softplus(parameters['alpha']) * data_sum
             return logits
         else:
             if self.use_sigmoid:
-                data_transformed = ((F.sigmoid(parameters['a']) * self.sigmoidx - self.sigmoidx / 2)[None, :, None] +
-                                    (F.sigmoid(parameters['b']) * self.sigmoidx - self.sigmoidx / 2)[None, :, None] * torch.log(data + 1e-16))
+                data_transformed = (F.sigmoid(parameters['a'] * self.sigmoidx - self.sigmoidx / 2)[None, :, None] +
+                                    F.sigmoid(parameters['b'] * self.sigmoidx - self.sigmoidx / 2)[None, :,
+                                    None] * torch.log(data + 1e-16))
                 data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
                 data_sum = data_activated.sum(dim=-1)
-                logits = F.softplus((F.sigmoid(parameters['alpha']) * self.sigmoidx - self.sigmoidx / 2)[None, :]) * data_sum + \
-                        (F.sigmoid(parameters['r']) * self.sigmoidx - self.sigmoidx / 2)[None, :]
+                logits = F.softplus(parameters['alpha'][None, :]) * data_sum + parameters['r'][None, :]
             else:
-                data_transformed = ((parameters['a'])[None, :, None] +
-                                    (parameters['b'])[None, :, None] * torch.log(data + 1e-16))
+                data_transformed = (parameters['a'][None, :, None] +
+                                    parameters['b'][None, :, None] * torch.log(data + 1e-16))
                 data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
                 data_sum = data_activated.sum(dim=-1)
-                logits = F.softplus((parameters['alpha'])[None, :]) * data_sum + \
-                        (parameters['r'])[None, :]
+                logits = F.softplus(parameters['alpha'][None, :]) * data_sum + parameters['r'][None, :]
+
+            if normalize or self.when_norm:  # jeśli pierwszy task ma 50 klas, to wszystkie naraz, czy nie?
+                if self.task0_type == 1:
+                    self.task_boundaries = torch.tensor(list(range(0, data.size(1) + 1, 10)))
+                if self.norm_type == 0:
+                    normalized_logits = torch.cat(
+                        [logits[:, start:end] / (1 + logits[:, start:end].std()) for start, end in
+                         zip(self.task_boundaries[:-1], self.task_boundaries[1:])], dim=1)
+                else:
+                    normalized_logits = torch.cat(
+                        [(logits[:, start:end] - logits[:, start:end].mean()) / logits[:, start:end].std() for
+                         start, end in
+                         zip(self.task_boundaries[:-1], self.task_boundaries[1:])], dim=1)
+                return normalized_logits
             return logits
+
     def n_nearest_points(self, distances):
-        # TODO: zmienić opis
-        # Funkcja do użycia w tworzeniu datasetu (i chyba przy predict)
-        #  - znajduje self.n_points najbliższych punktów z każdej klasy
-        # Wymiar distances: [batch_size, n_classes, samples_per_class (czyli przy użyciu kmeansów: n_centroids)]
-        # Czyli chcemy znaleźć dla każdego z 'batch_size' punktów dla każdej klasy: n_points najbliższych sąsiadów
+        # TODO: zmienić opis tej i pozostałych funkcji
         # Czy powinny być posortowane te punkty? ma to jakieś znacznie? Podobnie w model_predict
+        # distances: [batch_size, n_classes, samples_per_class
         return torch.topk(distances, self.n_points, sorted=True, largest=False)[0]
         # Return shape: [batch_size, self.n_classes, self.n_points]
 
     def save_original_parameters(self):
         # Save original parameters for later use in calculating the regularization
         if self.mode == 1:
-            for parameter in ['alpha', 'a', 'b', 'r']:
+            for parameter in self.parameters:
                 self.original_parameters[parameter] = torch.nn.Parameter(torch.cat(
                     [self.original_parameters[parameter], self.parameters[parameter][-self.D.size(0):]], dim=0))
 
-    def regularization(self): #zapisac osobno loss cross entropy i regularization podczas kolejnych epok
+    def regularization(self):  # zapisac osobno loss cross entropy i regularization podczas kolejnych epok
+        reg_loss = 0
         if self.mode == 1:
             prev_num_classes = len(self.original_parameters['a'])
-            for parameter in ['alpha', 'a', 'b', 'r']:
+            for parameter in self.parameters:
                 diff = (self.parameters[parameter][:prev_num_classes]
                         - self.original_parameters[parameter])
                 if self.reg_type == 1:
-                # L1 regularization
-                    return self.reg_lambda * torch.sum(torch.abs(diff))
+                    # L1 regularization
+                    reg_loss += self.reg_lambda * torch.sum(torch.abs(diff))
                 else:
-                # L2 regularization
-                    return self.reg_lambda * torch.sum(diff ** 2)
-        return 0
+                    # L2 regularization
+                    reg_loss += self.reg_lambda * torch.sum(diff ** 2)
+        return reg_loss
 
-    def fit(self, D):
+    losses_1, losses_reg = [], []
+
+    def fit(self, D, task_num=-1, **kwargs):
         """
         Trains the classifier on the current task data.
 
@@ -171,10 +187,12 @@ class GradKNNClassifier(Classifier):
 
         # Create the new parameters to train (or in the case of mode 0 and consequential task, use previous ones)
         if self.mode == 1:
-            for parameter in ['alpha', 'a', 'b', 'r']:
+            for parameter in self.parameters:
+                new_param = torch.rand(self.D.size(0), device=self.device) - 0.5
+                if parameter == 'alpha':
+                    new_param = torch.abs(new_param)
                 self.parameters[parameter] = torch.nn.Parameter(torch.cat(
-                    [self.parameters[parameter], torch.nn.Parameter(torch.randn(self.D.size(0), device=self.device))],
-                    dim=0))
+                    [self.parameters[parameter], torch.nn.Parameter(new_param)], dim=0))
 
         # Prepare the DataLoader
         D_clip = -self.D.size(0) if self.mode == 0 else 0
@@ -189,6 +207,8 @@ class GradKNNClassifier(Classifier):
         y = y.repeat_interleave(self.D.size(1)).to(self.device)
         dataset = TensorDataset(X, y)
 
+        self.task_boundaries = torch.cat([self.task_boundaries, torch.tensor(X.size(1)).unsqueeze(0)])
+
         # Define the split ratio
         train_ratio = 0.9
         train_size = int(train_ratio * len(dataset))
@@ -202,18 +222,21 @@ class GradKNNClassifier(Classifier):
         valid_dataloader = DataLoader(valid_dataset, batch_size=256, shuffle=False)
         if self.verbose:
             print("Dataloader created")
+        self.losses_1.append([])
+        self.losses_reg.append([])
 
-
-        x = self.D_centroids.size(0)-self.D.size(0)  # Number of elements to freeze in each parameter
+        x = self.D_centroids.size(0) - self.D.size(0)  # Number of elements to freeze in each parameter
 
         # Register hooks to freeze the first `x` elements
-        if(self.use_regularization == False):
+        if not self.train_previous:
             for name, param in self.parameters.items():
                 def hook_fn(grad, num_freeze=x):
                     # Zero out the gradient for the first `x` elements
                     grad[:num_freeze] = 0
                     return grad
+
                 param.register_hook(lambda grad: hook_fn(grad, x))
+
         # Train the model
         best_validation_loss = float('inf')
         epochs_no_improve = 0
@@ -227,14 +250,15 @@ class GradKNNClassifier(Classifier):
                 # Forward pass
                 predictions = self.net_predict(data)
                 loss = F.cross_entropy(predictions, target)
-                loss += self.regularization()
+                self.losses_1[-1].append(loss.item())
+                reg_loss = self.regularization()
+                loss += reg_loss
+                self.losses_reg[-1].append(reg_loss.item())
 
                 # Backward pass and optimization
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-
-                
 
                 # Track loss
                 epoch_loss += loss.item()
@@ -266,9 +290,8 @@ class GradKNNClassifier(Classifier):
                     print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
                           f"Loss = {valid_loss / len(valid_dataloader):.4f},")
 
-            if avg_valid_loss< best_validation_loss:
-                # torch.save(parameters.state_dict(), "parameters.pth") # TODO
-                # save_task_data(self.D_centroids.size(0), epoch, avg_valid_loss, parameters)
+            if avg_valid_loss < best_validation_loss:
+                # torch.save(self.parameters.state_dict(), "parameters.pth") # TODO
                 best_validation_loss = avg_valid_loss
                 epochs_no_improve = 0
             else:
@@ -276,12 +299,13 @@ class GradKNNClassifier(Classifier):
 
             # Early stopping
             if epochs_no_improve >= self.early_stop_patience:
+                print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
+                      f"Loss = {valid_loss / len(valid_dataloader):.4f},")
                 print(f"Early stopping at epoch {epoch + 1}")
-                # parameters.load_state_dict(torch.load("parameters.pth"))
-                self.save_original_parameters()
-                return
+                # self.parameters.load_state_dict(torch.load("parameters.pth"))
+                break
         self.save_original_parameters()
 
     def model_predict(self, distances):
         with torch.no_grad():
-            return torch.argmax(self.net_predict(self.n_nearest_points(distances)), -1)
+            return torch.argmax(self.net_predict(self.n_nearest_points(distances), normalize=False), -1)

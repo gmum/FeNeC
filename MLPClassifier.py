@@ -43,7 +43,7 @@ class MLPClassifier(Classifier):
         """
         return distances.min(-1)[0]
 
-    def fit(self, D, train=True):
+    def fit(self, D, train=True, **kwargs):
         """
         Trains the classifier on the current task data.
 
@@ -81,7 +81,7 @@ class MLPClassifier(Classifier):
             y = torch.tensor([[i] * D_samples.size(1) for i in range(self.n_classes)], dtype=torch.float32).flatten()
 
             # Train a classifier model on the distance-based features
-            self.model.fit(X.cpu(), y.cpu())
+            self.model.fit(X.cpu())
 
     def model_predict(self, distances):
         # Find the minimum distance between the test sample and the closest data point for each class
