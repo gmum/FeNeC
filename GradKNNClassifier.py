@@ -115,9 +115,8 @@ class GradKNNClassifier(Classifier):
             return logits
         else:
             if self.use_sigmoid:
-                data_transformed = (F.sigmoid(parameters['a'] * self.sigmoidx - self.sigmoidx / 2)[None, :, None] +
-                                    F.sigmoid(parameters['b'] * self.sigmoidx - self.sigmoidx / 2)[None, :,
-                                    None] * torch.log(data + 1e-16))
+                data_transformed = (torch.tanh(parameters['a'] * self.sigmoidx)[None, :, None] +
+                                    torch.tanh(parameters['b'] * self.sigmoidx)[None, :, None] * torch.log(data + 1e-16))
                 data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
                 data_sum = data_activated.sum(dim=-1)
                 logits = F.softplus(parameters['alpha'][None, :]) * data_sum + parameters['r'][None, :]
