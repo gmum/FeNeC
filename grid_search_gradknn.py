@@ -60,8 +60,8 @@ def objective(trial, dataset_name):
 
 
     # DEFINE HYPERPARAMETERS:
-    n_clusters = trial.suggest_int('n_clusters', 1, 75)
-    n_points = trial.suggest_int('n_points', 1, min(30, n_clusters))
+    n_clusters = trial.suggest_int('n_clusters', 2, 75)
+    n_points = trial.suggest_int('n_points', 1, min(30, n_clusters-1))
     gamma_1 = trial.suggest_float('gamma_1', 0.2, 2., log=False)
     gamma_2 = trial.suggest_float('gamma_2', 0.2, 2., log=False)
     
