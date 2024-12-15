@@ -107,7 +107,7 @@ def objective(trial, dataset_name):
                             early_stop_patience=10,
                             train_previous=True,
                             use_sigmoid=use_sigmoid,
-                            sigmoid_x=sigmoid_x,
+                            sigmoidx=sigmoid_x,
                             when_norm=when_norm,
                             norm_type=norm_type,
                             add_prev_centroids=add_prev_centroids,
