@@ -31,12 +31,16 @@ def objective(trial):
     tukey_lambda = trial.suggest_float('lambda', 0.2, 1., log=False)
     when_norm = trial.suggest_categorical("when_norm", [0, 1])
     norm_type = trial.suggest_categorical("norm_type", [0, 1])
-    task0_type = trial.suggest_categorical("task0_type", [0, 1])
-    train_previous = trial.suggest_categorical("train_previous", [True, False])
     reg_type = trial.suggest_categorical("reg_type", [1, 2])
-    lr = trial.suggest_float('lr', 0.001, 1., log=True)
+    lr = trial.suggest_float('lr', 0.0005, 1., log=True)
+    use_sigmoid = trial.suggest_categorical("use_sigmoid", [True, False])
     sigmoid_x = trial.suggest_float('sigmoid_x', 0.1, 10.)
     reg_lambda = trial.suggest_float('reg_lambda', .0001, 1, log=True)
+    add_prev_centroids = trial.suggest_categorical("add_prev_centroids", [True, False])
+    only_prev_centroids = trial.suggest_categorical("only_prev_centroids", [True, False])
+    repeat_prev_centroid = trial.suggest_int('repeat_prev_centroid', 1, 5)
+    optimizer_type = trial.suggest_categorical('optimizer_type', ['NAdam', 'RMSprop', 'Adam'])
+    dataloader_batch_size = 2 ** trial.suggest_int('dataloader_batch_size', 6, 10)
     ###
 
     # KNN metric:
@@ -60,11 +64,16 @@ def objective(trial):
                             device=device,
                             batch_size=64,
                             early_stop_patience=10,
-                            train_previous=train_previous,
-                            use_sigmoid=False,
+                            train_previous=True,
+                            use_sigmoid=use_sigmoid,
+                            sigmoid_x=sigmoid_x,
                             when_norm=when_norm,
                             norm_type=norm_type,
-                            task0_type=task0_type,
+                            add_prev_centroids=add_prev_centroids,
+                            only_prev_centroids=only_prev_centroids,
+                            repeat_prev_centroid=repeat_prev_centroid,
+                            optimizer_type=optimizer_type,
+                            dataloader_batch_size=dataloader_batch_size,
                             verbose=False)
 
     # Train the classifier and return accuracy

@@ -66,7 +66,8 @@ def save_task_data(task, epoch, loss, parameters, filename="data.csv"):
 class GradKNNClassifier(Classifier):
     def __init__(self, n_points=10, mode=0, num_epochs=100, kmeans=None, lr=1e-3, early_stop_patience=10,
                  train_previous=True, reg_type=1, reg_lambda=0.1, use_sigmoid=False, sigmoidx=2, verbose=True,
-                 when_norm=0, norm_type=0, task0_type=0, *args, **kwargs):
+                 when_norm=0, norm_type=0, add_prev_centroids=True, only_prev_centroids=False, repeat_prev_centroid=1,
+                 optimizer_type=0, dataloader_batch_size=512, *args, **kwargs):
         """
         Initializes the GradKNNClassifier.
 
@@ -102,7 +103,11 @@ class GradKNNClassifier(Classifier):
 
         self.when_norm = when_norm
         self.norm_type = norm_type
-        self.task0_type = task0_type
+        self.add_prev_centroids = add_prev_centroids
+        self.repeat_prev_centroid = repeat_prev_centroid
+        self.only_prev_centroids = only_prev_centroids
+        self.optimizer_type = optimizer_type
+        self.dataloader_batch_size = dataloader_batch_size
 
     def net_predict(self, data, normalize=True):
         parameters = self.parameters
@@ -127,9 +132,7 @@ class GradKNNClassifier(Classifier):
                 data_sum = data_activated.sum(dim=-1)
                 logits = F.softplus(parameters['alpha'][None, :]) * data_sum + parameters['r'][None, :]
 
-            if normalize or self.when_norm:  # jeśli pierwszy task ma 50 klas, to wszystkie naraz, czy nie?
-                if self.task0_type == 1:
-                    self.task_boundaries = torch.tensor(list(range(0, data.size(1) + 1, 10)))
+            if normalize or self.when_norm:
                 if self.norm_type == 0:
                     normalized_logits = torch.cat(
                         [logits[:, start:end] / (1 + logits[:, start:end].std()) for start, end in
@@ -148,6 +151,14 @@ class GradKNNClassifier(Classifier):
         # distances: [batch_size, n_classes, samples_per_class
         return torch.topk(distances, self.n_points, sorted=True, largest=False)[0]
         # Return shape: [batch_size, self.n_classes, self.n_points]
+
+    def n_nearest_points_centroids(self, distances, class_num=-1):
+        nearest_points = torch.topk(distances, self.n_points + 1, sorted=True, largest=False)[
+            0]  # obliczam + 1 najbliższych centroidów
+        nearest_points = torch.cat([nearest_points[:, :class_num, :-1],  # wywalam najdalszy z pozostałych klas
+                                    nearest_points[:, class_num:(class_num + 1), 1:],  # wywalam najbliższy z tej klasy
+                                    nearest_points[:, (class_num + 1):, :-1]], dim=1)
+        return nearest_points
 
     def save_original_parameters(self):
         # Save original parameters for later use in calculating the regularization
@@ -204,6 +215,23 @@ class GradKNNClassifier(Classifier):
         y = torch.arange(self.D.size(0)) if self.mode == 0 \
             else torch.arange(self.D_centroids.size(0) - self.D.size(0), self.D_centroids.size(0))
         y = y.repeat_interleave(self.D.size(1)).to(self.device)
+
+        if self.mode == 1 and self.add_prev_centroids:  # z mode==0 pewnie nic nie zmieni, ale można sprawdzić
+            D_range = self.D_centroids.size(0) if self.only_prev_centroids is False \
+                else self.D_centroids.size(0) - self.D.size(0)  # wszystkie centroidy albo tylko z poprzednich klas
+            if D_range is not 0:
+                X_centroids = torch.cat([self.metric.calculate_batch(
+                    lambda distances: self.n_nearest_points_centroids(distances, class_num),
+                    # funkcja licząca najbliższe punkty do aktualnej klasy class_num
+                    self.D_centroids,
+                    self.D_centroids[class_num],
+                    self.batch_size)
+                    for class_num in range(D_range)])
+                X = torch.cat([X, X_centroids.repeat(self.repeat_prev_centroid, 1, 1)])  # powtórzenie kilka razy
+
+                y_centroids = (torch.arange(D_range).repeat_interleave(self.D_centroids.size(1)).to(self.device))
+                y = torch.cat([y, y_centroids.repeat(self.repeat_prev_centroid)])
+
         dataset = TensorDataset(X, y)
 
         self.task_boundaries = torch.cat([self.task_boundaries, torch.tensor(X.size(1)).unsqueeze(0)])
@@ -217,8 +245,8 @@ class GradKNNClassifier(Classifier):
         train_dataset, valid_dataset = random_split(dataset, [train_size, valid_size])
 
         # Create DataLoaders for training and validation
-        train_dataloader = DataLoader(train_dataset, batch_size=256, shuffle=True)
-        valid_dataloader = DataLoader(valid_dataset, batch_size=256, shuffle=False)
+        train_dataloader = DataLoader(train_dataset, batch_size=self.dataloader_batch_size, shuffle=True)
+        valid_dataloader = DataLoader(valid_dataset, batch_size=self.dataloader_batch_size, shuffle=False)
         if self.verbose:
             print("Dataloader created")
         self.losses_1.append([])
@@ -239,7 +267,12 @@ class GradKNNClassifier(Classifier):
         # Train the model
         best_validation_loss = float('inf')
         epochs_no_improve = 0
-        optimizer = torch.optim.Adam(self.parameters.parameters(), lr=self.lr)
+        if self.optimizer_type == "NAdam":
+            optimizer = torch.optim.NAdam(self.parameters.parameters(), lr=self.lr)
+        elif self.optimizer_type == "RMSprop":
+            optimizer = torch.optim.RMSprop(self.parameters.parameters(), lr=self.lr)
+        else:
+            optimizer = torch.optim.Adam(self.parameters.parameters(), lr=self.lr)
         for epoch in range(self.num_epochs):
             epoch_loss = 0.0  # Track total loss for the epoch
             correct = 0  # Track correct predictions
