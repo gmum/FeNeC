@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     # Start the study
     print("Starting the hyperparameter search for study:", args.study_name)
-    DatasetRun.grid_search(objective=objective,
+    DatasetRun.grid_search(objective=objective_with_args,
                         study_name=args.study_name,
                         n_trials=n_trials,
                         sampler=sampler,
