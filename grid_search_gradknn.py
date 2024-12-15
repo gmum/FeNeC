@@ -128,7 +128,7 @@ if __name__ == "__main__":
 
     
     device = DatasetRun.get_device()
-    folder_name = f'./data/{args.dataset}/'
+    folder_name = f'./data/{args.dataset}'
 
     # Study parameters:
     sampler = get_sampler(args.sampler)  # Optuna sampler to use
