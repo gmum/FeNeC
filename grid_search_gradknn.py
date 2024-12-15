@@ -1,34 +1,75 @@
 import optuna
+import argparse
 
 import DatasetRun
 import Metrics
 from GradKNNClassifier import GradKNNClassifier
 from KMeans import KMeans
 
-device = DatasetRun.get_device()
-study_name = "dataset2_gradknn"
-folder_name = './data/dataset2/'
-
-# Study parameters:
-sampler = optuna.samplers.TPESampler()  # Optuna sampler
-n_trials = 2  # Number of trials (different hyperparameter sets to try)
-
-n_tasks = 6  # Number of tasks in the dataset (or number of tasks to run)
-only_last = True  # Whether to predict and calculate the accuracy score only on the last task
-
-# Constant model hyperparameters:
-shrinkage = 2
-metric_normalization = True
-centroids_normalization = True
 
 
-def objective(trial):
+def get_sampler(sampler_name):
+    """Get the Optuna sampler based on its name."""
+    if sampler_name == "Random":
+        return optuna.samplers.RandomSampler()
+    elif sampler_name == "Grid":
+        return optuna.samplers.GridSampler()
+    elif sampler_name == "TPE":
+        return optuna.samplers.TPESampler()
+    elif sampler_name == "CMAES":
+        return optuna.samplers.CmaEsSampler()
+    elif sampler_name == "NSGAII":
+        return optuna.samplers.NSGAIISampler()
+    elif sampler_name == "QMC":
+        return optuna.samplers.QMCSampler()
+    elif sampler_name == "GP":
+        return optuna.samplers.GPSampler()
+    elif sampler_name == "BoTorch":
+        return optuna.samplers.BoTorchSampler()
+    else:
+        raise ValueError(f"Unsupported sampler: {sampler_name}")
+
+def parse_args():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Hyperparameter optimization with Optuna.")
+    parser.add_argument("--n_trials", type=int, default=1, help="Number of trials for hyperparameter search.")
+    parser.add_argument("--dataset", type=str, required=True, help="Path to the dataset folder.")
+    parser.add_argument("--sampler", type=str, default="TPE", choices=[
+        "Random", "Grid", "TPE", "CMAES", "NSGAII", "QMC", "GP", "BoTorch"], help="Sampler to use for Optuna.")
+    parser.add_argument("--study_name", type=str, required=True, help="Name of the Optuna study.")
+    parser.add_argument("--only_last",type=bool, default=True, help="Whether to predict and calculate the accuracy score only on the last task.")
+    return parser.parse_args()
+
+
+
+
+
+
+def objective(trial, dataset_name):
+    
+    if(dataset_name == "dataset1"):
+        n_tasks = 10
+        shrinkage = 1
+        metric_normalization = True
+        centroids_normalization = False
+    elif(dataset_name == "dataset2"):
+        n_tasks = 6
+        shrinkage = 2
+        metric_normalization = True
+        centroids_normalization = True
+
+
     # DEFINE HYPERPARAMETERS:
     n_clusters = trial.suggest_int('n_clusters', 1, 75)
     n_points = trial.suggest_int('n_points', 1, min(30, n_clusters))
     gamma_1 = trial.suggest_float('gamma_1', 0.2, 2., log=False)
     gamma_2 = trial.suggest_float('gamma_2', 0.2, 2., log=False)
-    tukey_lambda = trial.suggest_float('lambda', 0.2, 1., log=False)
+    
+    if(dataset_name == "dataset1"):
+        tukey_lambda = 1
+    elif(dataset_name == "dataset2"):
+        tukey_lambda = trial.suggest_float('lambda', 0.2, 1., log=False)
+
     when_norm = trial.suggest_categorical("when_norm", [0, 1])
     norm_type = trial.suggest_categorical("norm_type", [0, 1])
     reg_type = trial.suggest_categorical("reg_type", [1, 2])
@@ -82,16 +123,36 @@ def objective(trial):
 
     return accuracy
 
+if __name__ == "__main__":
+    args = parse_args()
 
-# Start the study
-print("Starting the hyperparameter search for study:", study_name)
-DatasetRun.grid_search(objective=objective,
-                       study_name=study_name,
-                       n_trials=n_trials,
-                       sampler=sampler,
-                       restart=False,
-                       n_jobs=1,
-                       verbose=4)
+    
+    device = DatasetRun.get_device()
+    folder_name = f'./data/{args.dataset}/'
 
-# Save the results to a CSV file
-DatasetRun.save_to_csv(study_name)
+    # Study parameters:
+    sampler = get_sampler(args.sampler)  # Optuna sampler to use
+    n_trials = args.n_trials  # Number of trials (different hyperparameter sets to try)
+    only_last = args.only_last  # Whether to predict and calculate the accuracy score only on the last task
+
+    # Constant model hyperparameters:
+
+
+
+    def objective_with_args(trial):
+        return objective(trial, args.dataset)
+
+
+
+    # Start the study
+    print("Starting the hyperparameter search for study:", args.study_name)
+    DatasetRun.grid_search(objective=objective,
+                        study_name=args.study_name,
+                        n_trials=n_trials,
+                        sampler=sampler,
+                        restart=False,
+                        n_jobs=1,
+                        verbose=4)
+
+    # Save the results to a CSV file
+    DatasetRun.save_to_csv(args.study_name)
