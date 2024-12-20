@@ -41,8 +41,8 @@ class Classifier(abc.ABC):
 
         Parameters:
          - D (torch.Tensor): Training data tensor of shape [n_classes, samples_per_class, n_features].
-                           In subsequent calls, the samples_per_class and n_features dimensions
-                           must match the initial call.
+                             In subsequent calls, the samples_per_class and n_features dimensions
+                             must match the initial call.
         """
         if D.ndim == 2:
             D = D.unsqueeze(0)  # Ensure data has the correct shape.
@@ -167,12 +167,15 @@ class Classifier(abc.ABC):
             # Create DataFrame for formatted output
             data = {
                 "Task": tasks,
-                "% of all Answers": [f"{((task_pred == task).sum() + 1e-16) / len(task_pred) * 100:.0f}%" for task in
-                                     tasks],
                 "Precision": [f"{p * 100:.0f}%" for p in precision],
                 "Recall": [f"{r * 100:.0f}%" for r in recall],
                 "FScore": [f"{f:.2f}" for f in fscore],
+                "% of all Answers": [f"{((task_pred == task).sum() + 1e-16) / len(task_pred) * 100:.2f}%"
+                                     for task in tasks],
             }
+            for i in range(10):
+                data.update({f"Class {i}": [f"{((pred == (10 * task + i)).sum() + 1e-16) / len(pred) * 100:.2f}%"
+                                            for task in tasks]})
 
             df = pd.DataFrame(data)
             print(df.to_markdown(index=False))
