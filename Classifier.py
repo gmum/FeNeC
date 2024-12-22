@@ -173,9 +173,11 @@ class Classifier(abc.ABC):
                 "% of all Answers": [f"{((task_pred == task).sum() + 1e-16) / len(task_pred) * 100:.2f}%"
                                      for task in tasks],
             }
-            for i in range(10):
-                data.update({f"Class {i}": [f"{((pred == (10 * task + i)).sum() + 1e-16) / len(pred) * 100:.2f}%"
-                                            for task in tasks]})
+
+            if verbose > 1:
+                for i in range(10):
+                    data.update({f"Class {i}": [f"{((pred == (10 * task + i)).sum() + 1e-16) / len(pred) * 100:.2f}%"
+                                                for task in tasks]})
 
             df = pd.DataFrame(data)
             print(df.to_markdown(index=False))

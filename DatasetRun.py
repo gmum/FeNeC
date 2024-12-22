@@ -127,9 +127,9 @@ def save_to_csv(study_name, path='./results/', only_complete=True):
     Saves the results of the Optuna study to a CSV file.
 
     Parameters:
-     study_name (str): Name of the Optuna study.
-     path (str): Path to the results folder
-     only_complete (bool): If True, only include completed trials.
+     - study_name (str): Name of the Optuna study.
+     - path (str): Path to the results folder
+     - only_complete (bool): If True, only include completed trials.
     """
     # Load Optuna study to Pandas DataFrame
     loaded_study = optuna.load_study(
@@ -265,3 +265,60 @@ def print_results(study_name, path='./results/', only_important=True):
                 df_sorted.drop(key, axis=1, inplace=True)
 
     return df_sorted
+
+
+def plot_gradknn_parameters(classes, file_path='data.csv', n_cols=3, row_height=3, col_width=5):
+    data = pd.read_csv(file_path)
+
+    # Prepare the grid layout
+    n_rows = (len(classes) + n_cols - 1) // n_cols  # Calculate number of rows needed
+    fig_size = (n_cols * col_width, n_rows * row_height)
+    fig, axes = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=fig_size)
+    axes = axes.flatten()  # Flatten axes for easier indexing
+
+    for idx, class_x in enumerate(classes):
+        # Generate column names for the class
+        r_col = f'r_{class_x}'
+        alpha_col = f'alpha_{class_x}'
+        b_col = f'b_{class_x}'
+        a_col = f'a_{class_x}'
+
+        # Check if the columns exist
+        if not all(col in data.columns for col in [r_col, alpha_col, b_col, a_col]):
+            print(f"Columns for class {class_x} do not exist in the dataset.")
+            continue
+
+        # Calculate cumulative sum of epochs for the x-axis
+        cumulative_epochs = range(len(data))
+
+        # Extract necessary data
+        r_values = data[r_col]
+        alpha_values = data[alpha_col]
+        b_values = data[b_col]
+        a_values = data[a_col]
+
+        # Plot in the corresponding subplot
+        ax = axes[idx]
+        ax.plot(cumulative_epochs, r_values, label=f'{r_col}', color='blue')
+        ax.plot(cumulative_epochs, alpha_values, label=f'{alpha_col}', color='orange')
+        ax.plot(cumulative_epochs, b_values, label=f'{b_col}', color='green')
+        ax.plot(cumulative_epochs, a_values, label=f'{a_col}', color='red')
+
+        # Add vertical lines for epoch resets
+        epoch_zeros = data.index[data['epoch'] == 0].tolist()
+        for epoch_zero in epoch_zeros:
+            ax.axvline(x=epoch_zero, color='gray', linestyle='--', alpha=0.7)
+
+        # Customize subplot
+        ax.set_title(f'Class {class_x}')
+        ax.set_ylim([-3, 3])
+        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.legend(loc='best', fontsize=8)
+
+    # Hide any unused subplots
+    for idx in range(len(classes), len(axes)):
+        axes[idx].axis('off')
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.show()

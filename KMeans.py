@@ -24,7 +24,7 @@ class KMeans:
     def metric_preprocess(self, D):
         """ Preprocess metric: currently only used for Mahalanobis Metric """
         # We save the data for later (fit_predict method) and will preprocess the metric there
-        self.D_preprocess = D
+        self.D_preprocess = D.detach().clone()
 
     def kmeans_plusplus(self, D):
         """
@@ -76,7 +76,8 @@ class KMeans:
         # Iterate over each class to calculate the centroids
         for d_class in range(D.size(0)):
             # Preprocessing the metric on the current class (used in the case of Mahalanobis Distance for KMeans)
-            self.metric.preprocess(self.D_preprocess[d_class:d_class + 1])
+            if isinstance(self.metric, Metrics.MahalanobisMetric):
+                self.metric.preprocess(self.D_preprocess[d_class:d_class + 1])
 
             # Perform iterations up to max_iter (though it is usually less because of self.tol)
             for i in range(self.max_iter):

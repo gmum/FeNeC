@@ -66,6 +66,15 @@ class GradKNNClassifier(Classifier):
             self.original_parameters = self.parameters.copy()  # for use in regularization
 
     def model_predict(self, distances):
+        """
+        Method for predicting class labels based on distances to training samples.
+
+        Parameters:
+         - distances (Tensor): Distances of shape [batch_size, n_classes, n_centroids].
+
+        Returns:
+         - Tensor: Predicted class labels.
+        """
         with torch.no_grad():
             return torch.argmax(self.gradknn_predict(self.n_nearest_points(distances), is_training=False), -1)
 
@@ -80,7 +89,6 @@ class GradKNNClassifier(Classifier):
         Returns:
          - torch.Tensor: Predicted logits.
         """
-
         parameters = self.parameters
 
         if self.mode == 0:
@@ -110,9 +118,8 @@ class GradKNNClassifier(Classifier):
 
             # Standardize logits during training if specified
             if is_training and self.use_standardization is True:
-                logits = torch.cat(
-                    [(logits[:, start:end] - logits[:, start:end].mean()) / logits[:, start:end].std() for
-                     start, end in zip(self.task_boundaries[:-1], self.task_boundaries[1:])], dim=1)
+                logits = torch.cat([(logits[:, start:end] - logits[:, start:end].mean()) / logits[:, start:end].std()
+                                    for start, end in zip(self.task_boundaries[:-1], self.task_boundaries[1:])], dim=1)
 
             return logits
 
@@ -421,26 +428,17 @@ class GradKNNClassifier(Classifier):
          - parameters (dict): Dictionary containing model parameters (`alpha`, `a`, `b`, `r`).
          - filename (str): The name of the CSV file to save data to (default is "data.csv").
         """
-        all_classes = 100  # Fixed size for parameter lists
-        alpha = parameters["alpha"]
-        a = parameters["a"]
-        b = parameters["b"]
-        r = parameters["r"]
-
-        # Validate parameter types
-        # for param_name, param in zip(["alpha", "a", "b", "r"], [alpha, a, b, r]):
-        #    if not isinstance(param, torch.nn.Parameter):
-        #        raise TypeError(f"{param_name} must be of type torch.nn.Parameter, but got {type(param)}")
+        class_num = 100
 
         # Convert parameters to lists and pad to all_classes with zeros
         def pad_to_all_classes(param):
             param_list = param.detach().cpu().numpy().tolist()
-            return param_list + [0] * (all_classes - len(param_list))
+            return param_list + [0] * (class_num - len(param_list))
 
-        alpha_list = pad_to_all_classes(alpha)
-        a_list = pad_to_all_classes(a)
-        b_list = pad_to_all_classes(b)
-        r_list = pad_to_all_classes(r)
+        alpha_list = pad_to_all_classes(parameters["alpha"])
+        a_list = pad_to_all_classes(parameters["a"])
+        b_list = pad_to_all_classes(parameters["b"])
+        r_list = pad_to_all_classes(parameters["r"])
 
         # Prepare data row
         row = [task, epoch, loss] + alpha_list + a_list + b_list + r_list
@@ -454,10 +452,10 @@ class GradKNNClassifier(Classifier):
             if not file_exists:
                 header = (
                         ["task", "epoch", "loss"] +
-                        [f"alpha_{i}" for i in range(all_classes)] +
-                        [f"a_{i}" for i in range(all_classes)] +
-                        [f"b_{i}" for i in range(all_classes)] +
-                        [f"r_{i}" for i in range(all_classes)]
+                        [f"alpha_{i}" for i in range(class_num)] +
+                        [f"a_{i}" for i in range(class_num)] +
+                        [f"b_{i}" for i in range(class_num)] +
+                        [f"r_{i}" for i in range(class_num)]
                 )
                 writer.writerow(header)
 
