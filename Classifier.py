@@ -158,18 +158,24 @@ class Classifier(abc.ABC):
         """ Calculates the accuracy score. """
 
         if verbose:
+            n_classes = (y_true.max() + 1).int().item()
+            n_tasks = n_classes // 10
             task_y_true = y_true // 10
             task_pred = pred // 10
-            precision, recall, fscore, support = score(task_y_true.detach().cpu().numpy(),
-                                                       task_pred.detach().cpu().numpy())
+            precision, recall, fscore, support = score(y_true.detach().cpu().numpy(), pred.detach().cpu().numpy())
+
+            # TODO: currently, accuracy is the same as recall, should it work that way?
+            # conf_matrix = sklearn.metrics.confusion_matrix(y_true.detach().cpu().numpy(), pred.detach().cpu().numpy())
+            # accuracy = conf_matrix.diagonal() / conf_matrix.sum(axis=1)
 
             tasks = sorted(set(task_y_true.detach().cpu().numpy()))
             # Create DataFrame for formatted output
             data = {
                 "Task": tasks,
-                "Precision": [f"{p * 100:.0f}%" for p in precision],
-                "Recall": [f"{r * 100:.0f}%" for r in recall],
-                "FScore": [f"{f:.2f}" for f in fscore],
+                "Precision": [f"{p * 100:.0f}%" for p in precision.reshape(-1, 10).mean(1)],
+                "Recall": [f"{r * 100:.0f}%" for r in recall.reshape(-1, 10).mean(1)],
+                "FScore": [f"{f:.2f}" for f in fscore.reshape(-1, 10).mean(1)],
+                # "Accuracy": [f"{f:.2f}" for f in accuracy.reshape(-1, 10).mean(1)],
                 "% of all Answers": [f"{((task_pred == task).sum() + 1e-16) / len(task_pred) * 100:.2f}%"
                                      for task in tasks],
             }

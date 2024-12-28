@@ -10,7 +10,7 @@ from Classifier import Classifier
 
 class GradKNNClassifier(Classifier):
     def __init__(self, n_points=10, mode=1, num_epochs=100, lr=1e-3, early_stop_patience=10, train_previous=True,
-                 reg_type=1, reg_lambda=0.1, use_tanh=False, tanh_x=2, use_standardization=False, add_centroids=True,
+                 reg_type=1, reg_lambda=0.1, use_tanh=False, tanh_x=2, normalization_type=0, add_centroids=True,
                  only_prev_centroids=True, new_old_ratio=1, dataloader_batch_size=128, verbose=True, *args, **kwargs):
         """
         Initializes the GradKNNClassifier.
@@ -28,7 +28,10 @@ class GradKNNClassifier(Classifier):
          - reg_lambda (float): Regularization weight.
          - use_tanh (bool): Whether to apply `tanh` activation on logits.
          - tanh_x (float): Scaling factor for `tanh` activation.
-         - use_standardization (bool): If True, standardize logits during training.
+         - normalization_type (int): Normalization type:
+            * 0: Don't use normalization.
+            * 1: Use standardization.
+            * 2: Use normalization.
          - add_centroids (bool): If True, include centroids in training.
          - only_prev_centroids (bool): If True, exclude centroids of the current task.
          - new_old_ratio (float): Ratio of new task samples to old task centroids in training.
@@ -46,7 +49,7 @@ class GradKNNClassifier(Classifier):
         self.reg_lambda = reg_lambda
         self.use_tanh = use_tanh
         self.tanh_x = tanh_x
-        self.use_standardization = use_standardization
+        self.normalization_type = normalization_type
         self.add_prev_centroids = add_centroids
         self.only_prev_centroids = only_prev_centroids
         self.new_old_ratio = new_old_ratio
@@ -63,7 +66,7 @@ class GradKNNClassifier(Classifier):
         else:
             for parameter_name in ['alpha', 'a', 'b', 'r']:
                 self.parameters.update({parameter_name: torch.nn.Parameter(torch.empty(0, device=self.device))})
-            self.original_parameters = self.parameters.copy()  # for use in regularization
+        self.original_parameters = None
 
     def model_predict(self, distances):
         """
@@ -117,8 +120,12 @@ class GradKNNClassifier(Classifier):
                 logits = F.softplus(parameters['alpha'][None, :]) * data_sum + parameters['r'][None, :]
 
             # Standardize logits during training if specified
-            if is_training and self.use_standardization is True:
+            if is_training and self.normalization_type == 1:
                 logits = torch.cat([(logits[:, start:end] - logits[:, start:end].mean()) / logits[:, start:end].std()
+                                    for start, end in zip(self.task_boundaries[:-1], self.task_boundaries[1:])], dim=1)
+
+            elif is_training and self.normalization_type == 2:
+                logits = torch.cat([logits[:, start:end] / (1 + logits[:, start:end].std())
                                     for start, end in zip(self.task_boundaries[:-1], self.task_boundaries[1:])], dim=1)
 
             return logits
@@ -159,7 +166,10 @@ class GradKNNClassifier(Classifier):
     def train(self):
         """ Main training loop for the classifier. """
         # Prepare the DataLoaders for training and validation
-        train_dataloader, train_dataloader_c, valid_dataloader = self.prepare_dataloader()
+        train_dataloader, train_dataloader_sec, valid_dataloader = self.prepare_dataloader()
+
+        if train_dataloader_sec is not None:
+            iter_dataloader_sec = iter(train_dataloader_sec)  # Iterator for additional centroids data
 
         # Initialize variables for early stopping and tracking metrics
         best_validation_loss = float('inf')
@@ -170,21 +180,18 @@ class GradKNNClassifier(Classifier):
             correct = 0  # Number of correct predictions
             total = 0  # Total number of samples
 
-            if train_dataloader_c is not None:
-                iter_dataloader_c = iter(train_dataloader_c)  # Iterator for additional centroids data
-
             for data, target in train_dataloader:
                 # Concatenate training data with centroids data if provided
-                if train_dataloader_c is not None:
+                if train_dataloader_sec is not None:
                     try:
-                        data_c, target_c = next(iter_dataloader_c)
+                        data_sec, target_sec = next(iter_dataloader_sec)
                     except StopIteration:
                         # Reinitialize iterator if exhausted
-                        iter_dataloader_c = iter(train_dataloader_c)
-                        data_c, target_c = next(iter_dataloader_c)
+                        iter_dataloader_sec = iter(train_dataloader_sec)
+                        data_sec, target_sec = next(iter_dataloader_sec)
                     # Combine data and targets
-                    data = torch.cat([data, data_c])
-                    target = torch.cat([target, target_c])
+                    data = torch.cat([data, data_sec])
+                    target = torch.cat([target, target_sec])
 
                 # Forward pass through the model
                 predictions = self.gradknn_predict(data)
@@ -221,15 +228,15 @@ class GradKNNClassifier(Classifier):
 
             if self.verbose:
                 # Save parameters for later study.
-                self.save_task_data(self.D_centroids.size(0), epoch, avg_valid_loss, self.parameters)
-                if epoch % 20 == 0:
+                # self.save_task_data(self.D_centroids.size(0), epoch, avg_valid_loss, self.parameters)
+                if epoch % 10 == 0:
                     print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
                           f"Loss = {valid_loss / len(valid_dataloader):.4f},")
 
             # Early stopping logic: track and compare validation loss.
             if avg_valid_loss < best_validation_loss:
                 # Save the best data for early stopping (commented out for faster runs, as it shouldn't change much)
-                # torch.save(self.parameters.state_dict(), "parameters.pth")
+                torch.save(self.parameters.state_dict(), "parameters.pth")
                 best_validation_loss = avg_valid_loss
                 epochs_no_improve = 0
             else:
@@ -241,7 +248,7 @@ class GradKNNClassifier(Classifier):
                 print(f"Early Stopping at Epoch [{epoch + 1}/{self.num_epochs}]: Accuracy = {valid_accuracy:.2f}%, "
                       f"Loss = {valid_loss / len(valid_dataloader):.4f},")
                 # Load the best data (commented out for faster runs, as it shouldn't change much)
-                # self.parameters.load_state_dict(torch.load("parameters.pth"))
+                self.parameters.load_state_dict(torch.load("parameters.pth", weights_only=True))
                 break
 
     def prepare_dataloader(self):
@@ -257,17 +264,14 @@ class GradKNNClassifier(Classifier):
         X = torch.cat([self.metric.calculate_batch(
             self.n_nearest_points,
             # For mode 1, train all the classes, and for mode 0, train only the current task:
-            self.D_centroids[(0 if self.mode == 1 else -self.D.size(0)):],
+            self.D_centroids,
             d_class,
             self.batch_size)
             for d_class in self.D])
-        # X shape: [points in the current task, n_classes / classes in the current task, self.n_points]
+        # X shape: [points in the current task, n_classes or classes in the current task, self.n_points]
 
         # Construct corresponding labels.
-        if self.mode == 0:
-            y = torch.arange(self.D.size(0))
-        else:
-            y = torch.arange(self.D_centroids.size(0) - self.D.size(0), self.D_centroids.size(0))
+        y = torch.arange(self.D_centroids.size(0) - self.D.size(0), self.D_centroids.size(0))
         y = y.repeat_interleave(self.D.size(1)).to(self.device)
 
         # Split the dataset into training and validation subsets (validation for early stopping)
@@ -310,7 +314,10 @@ class GradKNNClassifier(Classifier):
         if self.verbose:
             print("Dataloader created")
 
-        return train_dataloader, train_dataloader_c, valid_dataloader
+        if train_dataloader_c is None or len(train_dataloader) < len(train_dataloader_c):
+            return train_dataloader, train_dataloader_c, valid_dataloader
+        else:
+            return train_dataloader_c, train_dataloader, valid_dataloader
 
     def update_parameters(self, init_range=(-1, 1)):
         """
@@ -339,13 +346,17 @@ class GradKNNClassifier(Classifier):
         Returns:
          - torch.Tensor: Regularization loss value.
         """
-        reg_loss = 0  # Initialize regularization loss
-        if self.mode == 1 and self.reg_type != 0:  # Only apply regularization in mode 1
-            prev_num_classes = len(self.original_parameters['a'])
+        reg_loss = 0  # Regularization loss
+        if self.reg_type != 0 and self.original_parameters is not None:
             for parameter in self.parameters:
-                # Compute the difference between current and original parameters for each previous task's parameter
-                diff = (self.parameters[parameter][:prev_num_classes]
-                        - self.original_parameters[parameter])
+                if self.mode == 0:
+                    # Compute the difference between current parameters, and parameters from the previous task
+                    diff = self.parameters[parameter] - self.original_parameters[parameter]
+                else:
+                    # Compute the difference between current and original parameters for each previous task's parameter
+                    prev_num_classes = len(self.original_parameters[parameter])
+                    diff = (self.parameters[parameter][:prev_num_classes] - self.original_parameters[parameter])
+
                 if self.reg_type == 1:
                     # Apply L1 regularization (sum of absolute differences)
                     reg_loss += self.reg_lambda * torch.sum(torch.abs(diff))
@@ -390,7 +401,11 @@ class GradKNNClassifier(Classifier):
 
     def save_original_parameters(self):
         """ Save original parameters for use in regularization. """
-        if self.mode == 1:  # Only relevant in mode 1
+        if self.mode == 0 or self.original_parameters is None:
+            # If the mode is 0, or the mode is 1, but it is the first task, deep copy the current parameters
+            self.original_parameters = (
+                torch.nn.ParameterDict({key: value.clone() for key, value in self.parameters.items()}))
+        else:
             for parameter in self.parameters:
                 # Append the newly added parameters for the current task to the original parameters
                 self.original_parameters[parameter] = torch.nn.Parameter(torch.cat(

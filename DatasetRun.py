@@ -311,7 +311,7 @@ def plot_gradknn_parameters(classes, file_path='data.csv', n_cols=3, row_height=
 
         # Customize subplot
         ax.set_title(f'Class {class_x}')
-        ax.set_ylim([-3, 3])
+        ax.set_ylim([-5, 5])
         ax.grid(True, linestyle='--', alpha=0.5)
         ax.legend(loc='best', fontsize=8)
 
