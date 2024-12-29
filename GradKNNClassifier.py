@@ -4,6 +4,7 @@ import os
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset, ConcatDataset, random_split
+import wandb
 
 from Classifier import Classifier
 
@@ -68,6 +69,19 @@ class GradKNNClassifier(Classifier):
                 self.parameters.update({parameter_name: torch.nn.Parameter(torch.empty(0, device=self.device))})
         self.original_parameters = None
 
+
+        with open("wandb_key.txt", "r") as key_file:
+            api_key = key_file.read().strip()
+
+        # Login to W&B using the key
+        wandb.login(key=api_key)
+
+        wandb.init(
+            project="gradknntest",
+            config = {**locals(), **kwargs}
+        )
+
+
     def model_predict(self, distances):
         """
         Method for predicting class labels based on distances to training samples.
@@ -78,6 +92,11 @@ class GradKNNClassifier(Classifier):
         Returns:
          - Tensor: Predicted class labels.
         """
+
+        is_last_task = distances.size(1) == 100
+
+        if is_last_task:
+            wandb.finish()
         with torch.no_grad():
             return torch.argmax(self.gradknn_predict(self.n_nearest_points(distances), is_training=False), -1)
 
@@ -228,7 +247,7 @@ class GradKNNClassifier(Classifier):
 
             if self.verbose:
                 # Save parameters for later study.
-                # self.save_task_data(self.D_centroids.size(0), epoch, avg_valid_loss, self.parameters)
+                self.save_task_data(self.D_centroids.size(0), epoch, avg_valid_loss, self.parameters)
                 if epoch % 10 == 0:
                     print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
                           f"Loss = {valid_loss / len(valid_dataloader):.4f},")
@@ -432,20 +451,19 @@ class GradKNNClassifier(Classifier):
         return train_dataset, valid_dataset
 
     @staticmethod
-    def save_task_data(task, epoch, loss, parameters, filename="data.csv"):
+    def save_task_data(task, epoch, loss, parameters):
         """
-        Save task data to a CSV file. Appends to an existing file or creates a new one.
+        Save task data to Weights & Biases (W&B).
 
         Parameters:
-         - task (str): The name of the task.
-         - epoch (int): The current epoch.
-         - loss (float): Loss value for the epoch.
-         - parameters (dict): Dictionary containing model parameters (`alpha`, `a`, `b`, `r`).
-         - filename (str): The name of the CSV file to save data to (default is "data.csv").
+        - task (str): The name of the task.
+        - epoch (int): The current epoch.
+        - loss (float): Loss value for the epoch.
+        - parameters (dict): Dictionary containing model parameters (`alpha`, `a`, `b`, `r`).
         """
         class_num = 100
 
-        # Convert parameters to lists and pad to all_classes with zeros
+        # Convert parameters to lists and pad to class_num with zeros
         def pad_to_all_classes(param):
             param_list = param.detach().cpu().numpy().tolist()
             return param_list + [0] * (class_num - len(param_list))
@@ -455,24 +473,16 @@ class GradKNNClassifier(Classifier):
         b_list = pad_to_all_classes(parameters["b"])
         r_list = pad_to_all_classes(parameters["r"])
 
-        # Prepare data row
-        row = [task, epoch, loss] + alpha_list + a_list + b_list + r_list
+        # Prepare the data dictionary for W&B logging
+        data = {
+            "task": task,
+            "epoch": epoch,
+            "loss": loss,
+            **{f"alpha_{i}": alpha_list[i] for i in range(class_num)},
+            **{f"a_{i}": a_list[i] for i in range(class_num)},
+            **{f"b_{i}": b_list[i] for i in range(class_num)},
+            **{f"r_{i}": r_list[i] for i in range(class_num)},
+        }
 
-        # Check if the file exists and determine if a header is needed
-        file_exists = os.path.isfile(filename)
-        with open(filename, mode='a', newline='') as file:
-            writer = csv.writer(file)
-
-            # Write header if the file does not exist
-            if not file_exists:
-                header = (
-                        ["task", "epoch", "loss"] +
-                        [f"alpha_{i}" for i in range(class_num)] +
-                        [f"a_{i}" for i in range(class_num)] +
-                        [f"b_{i}" for i in range(class_num)] +
-                        [f"r_{i}" for i in range(class_num)]
-                )
-                writer.writerow(header)
-
-            # Write the data row
-            writer.writerow(row)
+        # Log data to W&B
+        wandb.log(data)
