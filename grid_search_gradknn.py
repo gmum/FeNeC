@@ -7,6 +7,7 @@ from GradKNNClassifier import GradKNNClassifier
 from KMeans import KMeans
 
 dataset_name = ""
+study_name = ""
 
 def get_sampler(sampler_name):
     """Get the Optuna sampler based on its name."""
@@ -61,7 +62,7 @@ def objective(trial):
         metric_normalization = True
         centroids_normalization = True
 
-
+    optimizer = trial.suggest_categorical("optimizer", ["Adam", "SGD"])
 
     n_points = trial.suggest_int('n_points', 1, 40)
     # DEFINE HYPERPARAMETERS:
@@ -76,6 +77,7 @@ def objective(trial):
     elif(dataset_name == "dataset2"):
         tukey_lambda = trial.suggest_float('lambda', 0.2, 1., log=False)
 
+
     reg_type = 0 #trial.suggest_categorical("reg_type", [1, 2])
     lr = trial.suggest_float('lr', 0.0005, 0.1, log=True)
     use_tanh = trial.suggest_categorical("use_tanh", [True, False])
@@ -84,7 +86,7 @@ def objective(trial):
     #reg_lambda = trial.suggest_float('reg_lambda', .0001, 1, log=True)
     add_prev_centroids = True #trial.suggest_categorical("add_prev_centroids", [True, False])
     only_prev_centroids = trial.suggest_categorical("only_prev_centroids", [True, False])
-    new_old_ratio = trial.suggest_float("new_old_ratio",0.02,0.98);
+    new_old_ratio = trial.suggest_float("new_old_ratio",0.02,0.98)
     dataloader_batch_size = 64 #2 ** trial.suggest_int('dataloader_batch_size', 6, 10)
     ###
 
@@ -102,7 +104,7 @@ def objective(trial):
                             kmeans = kmeans,
                             device = device,
                             batch_size = 64,
-                            
+                            optimizer = optimizer,
                             n_points=n_points,
                             mode=1,
                             num_epochs=100,
@@ -117,6 +119,9 @@ def objective(trial):
                             only_prev_centroids = only_prev_centroids,
                             new_old_ratio = new_old_ratio,
                             dataloader_batch_size = 64,
+                            
+                            normalization_type=2,
+                            study_name=study_name,
                             verbose=False)
 
     # Train the classifier and return accuracy
@@ -131,6 +136,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     dataset_name = args.dataset
+    study_name = args.study_name
     
     device = DatasetRun.get_device()
     folder_name = f'./data/{args.dataset}'

@@ -10,9 +10,9 @@ from Classifier import Classifier
 
 
 class GradKNNClassifier(Classifier):
-    def __init__(self, n_points=10, mode=1, num_epochs=100, lr=1e-3, early_stop_patience=10, train_previous=True,
+    def __init__(self, optimizer="Adam", n_points=10, mode=1, num_epochs=100, lr=1e-3, early_stop_patience=10, train_previous=True,
                  reg_type=1, reg_lambda=0.1, use_tanh=False, tanh_x=2, normalization_type=0, add_centroids=True,
-                 only_prev_centroids=True, new_old_ratio=1, dataloader_batch_size=128, verbose=True, *args, **kwargs):
+                 only_prev_centroids=True, new_old_ratio=1, dataloader_batch_size=128, study_name = "GradKNNClassifier", verbose=True, *args, **kwargs):
         """
         Initializes the GradKNNClassifier.
 
@@ -40,6 +40,7 @@ class GradKNNClassifier(Classifier):
          - verbose (bool): If True, print training details.
         """
         super().__init__(*args, **kwargs)
+        self.optimizer = optimizer
         self.n_points = n_points
         self.mode = mode
         self.num_epochs = num_epochs
@@ -77,7 +78,7 @@ class GradKNNClassifier(Classifier):
         wandb.login(key=api_key)
 
         wandb.init(
-            project="gradknntest1",
+            project=study_name,
             config = {**locals(), **kwargs}
         )
 
@@ -193,7 +194,11 @@ class GradKNNClassifier(Classifier):
         # Initialize variables for early stopping and tracking metrics
         best_validation_loss = float('inf')
         epochs_no_improve = 0  # Count of consecutive epochs without improvement
-        optimizer = torch.optim.Adam(self.parameters.parameters(), lr=self.lr)
+        #optimizer = torch.optim.Adam(self.parameters.parameters(), lr=self.lr)
+        if self.optimizer == "Adam":
+            optimizer = torch.optim.Adam(self.parameters.parameters(), lr=self.lr)
+        elif self.optimizer == "SGD":
+            optimizer = torch.optim.SGD(self.parameters.parameters(), lr=self.lr)
         for epoch in range(self.num_epochs):
             epoch_loss = 0.0  # Cumulative loss for the epoch
             correct = 0  # Number of correct predictions
@@ -216,7 +221,10 @@ class GradKNNClassifier(Classifier):
                 predictions = self.gradknn_predict(data)
                 loss = F.cross_entropy(predictions, target)  # Cross-entropy loss
                 reg_loss = self.regularization()  # Regularization loss
+                if self.verbose:
+                    wandb.log({"cross_entropy_loss": loss, "reg_loss": reg_loss, "total_loss": loss + reg_loss})
                 loss += reg_loss  # Add regularization to the total loss
+
 
                 # Backpropagation and optimization
                 optimizer.zero_grad()
@@ -228,6 +236,21 @@ class GradKNNClassifier(Classifier):
                 predicted_classes = torch.argmax(predictions, dim=1)
                 correct += (predicted_classes == target).sum().item()
                 total += target.size(0)
+
+                if self.verbose:
+                    valid_correct = 0
+                    valid_total = 0
+                    valid_loss = 0.0
+                    with torch.no_grad():
+                        # Evaluate validation dataset
+                        for data, target in valid_dataloader:
+                            predictions = self.gradknn_predict(data)
+                            predicted_classes = torch.argmax(predictions, dim=1)
+                            valid_correct += (predicted_classes == target).sum().item()
+                            valid_total += target.size(0)
+                            valid_loss += F.cross_entropy(predictions, target).item()
+                    avg_valid_loss = valid_loss / len(valid_dataloader)          
+                    wandb.log({"valid_loss": avg_valid_loss, "valid_accuracy": 100.0 * valid_correct / valid_total})   
 
             # Calculate and display epoch metrics (accuracy and loss)
             epoch_accuracy = 100.0 * correct / total
@@ -243,11 +266,15 @@ class GradKNNClassifier(Classifier):
                     valid_total += target.size(0)
                     valid_loss += F.cross_entropy(predictions, target).item()
             avg_valid_loss = valid_loss / len(valid_dataloader)
+            if not self.verbose:
+                wandb.log({"cross_entropy_loss": epoch_loss / len(train_dataloader), "reg_loss": reg_loss, "total_loss": loss + reg_loss})
+                wandb.log({"valid_loss": avg_valid_loss, "valid_accuracy": 100.0 * valid_correct / valid_total})
             valid_accuracy = 100.0 * valid_correct / valid_total
 
+            self.save_task_data(self.D_centroids.size(0), epoch, self.parameters)
+            
             if self.verbose:
                 # Save parameters for later study.
-                self.save_task_data(self.D_centroids.size(0), epoch, avg_valid_loss, self.parameters)
                 if epoch % 10 == 0:
                     print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
                           f"Loss = {valid_loss / len(valid_dataloader):.4f},")
@@ -430,6 +457,52 @@ class GradKNNClassifier(Classifier):
                 self.original_parameters[parameter] = torch.nn.Parameter(torch.cat(
                     [self.original_parameters[parameter], self.parameters[parameter][-self.D.size(0):]], dim=0))
 
+    def save_task_data(self, task, epoch, parameters):
+        """
+        Save task data to Weights & Biases (W&B).
+
+        Parameters:
+        - task (str): The name of the task.
+        - epoch (int): The current epoch.
+        - loss (float): Loss value for the epoch.
+        - parameters (dict): Dictionary containing model parameters (`alpha`, `a`, `b`, `r`).
+        """
+        class_num = 100
+
+
+        if self.mode == 0:
+            data = {
+                "task": task,
+                "epoch": epoch,
+                "alpha": parameters["alpha"].item(),
+                "a": parameters["a"].item(),
+                "b": parameters["b"].item(),
+            }
+
+        elif self.mode == 1:
+
+            # Convert parameters to lists and pad to class_num with zeros
+            def pad_to_all_classes(param):
+                param_list = param.detach().cpu().numpy().tolist()
+                return param_list + [0] * (class_num - len(param_list))
+
+            alpha_list = pad_to_all_classes(parameters["alpha"])
+            a_list = pad_to_all_classes(parameters["a"])
+            b_list = pad_to_all_classes(parameters["b"])
+            r_list = pad_to_all_classes(parameters["r"])
+
+            # Prepare the data dictionary for W&B logging
+            data = {
+                "task": task,
+                "epoch": epoch,
+                **{f"alpha_{i}": alpha_list[i] for i in range(class_num)},
+                **{f"a_{i}": a_list[i] for i in range(class_num)},
+                **{f"b_{i}": b_list[i] for i in range(class_num)},
+                **{f"r_{i}": r_list[i] for i in range(class_num)},
+            }
+
+            # Log data to W&B
+            wandb.log(data)
     @staticmethod
     def train_test_split(dataset, train_ratio=0.9):
         """
@@ -449,40 +522,3 @@ class GradKNNClassifier(Classifier):
         # Divide the dataset
         train_dataset, valid_dataset = random_split(dataset, [train_size, valid_size])
         return train_dataset, valid_dataset
-
-    @staticmethod
-    def save_task_data(task, epoch, loss, parameters):
-        """
-        Save task data to Weights & Biases (W&B).
-
-        Parameters:
-        - task (str): The name of the task.
-        - epoch (int): The current epoch.
-        - loss (float): Loss value for the epoch.
-        - parameters (dict): Dictionary containing model parameters (`alpha`, `a`, `b`, `r`).
-        """
-        class_num = 100
-
-        # Convert parameters to lists and pad to class_num with zeros
-        def pad_to_all_classes(param):
-            param_list = param.detach().cpu().numpy().tolist()
-            return param_list + [0] * (class_num - len(param_list))
-
-        alpha_list = pad_to_all_classes(parameters["alpha"])
-        a_list = pad_to_all_classes(parameters["a"])
-        b_list = pad_to_all_classes(parameters["b"])
-        r_list = pad_to_all_classes(parameters["r"])
-
-        # Prepare the data dictionary for W&B logging
-        data = {
-            "task": task,
-            "epoch": epoch,
-            "loss": loss,
-            **{f"alpha_{i}": alpha_list[i] for i in range(class_num)},
-            **{f"a_{i}": a_list[i] for i in range(class_num)},
-            **{f"b_{i}": b_list[i] for i in range(class_num)},
-            **{f"r_{i}": r_list[i] for i in range(class_num)},
-        }
-
-        # Log data to W&B
-        wandb.log(data)
