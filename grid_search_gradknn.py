@@ -6,7 +6,7 @@ import Metrics
 from GradKNNClassifier import GradKNNClassifier
 from KMeans import KMeans
 
-
+dataset_name = ""
 
 def get_sampler(sampler_name):
     """Get the Optuna sampler based on its name."""
@@ -45,8 +45,11 @@ def parse_args():
 
 
 
-def objective(trial, dataset_name):
-    
+def objective(trial):
+    shrinkage = 0
+    metric_normalization = True
+    centroids_normalization = True
+    n_tasks = 0
     if(dataset_name == "dataset1"):
         n_tasks = 10
         shrinkage = 1
@@ -59,29 +62,30 @@ def objective(trial, dataset_name):
         centroids_normalization = True
 
 
+
+    n_points = trial.suggest_int('n_points', 1, 40)
     # DEFINE HYPERPARAMETERS:
-    n_clusters = trial.suggest_int('n_clusters', 2, 75)
-    n_points = trial.suggest_int('n_points', 1, min(30, n_clusters-1))
+    n_clusters = 70 # trial.suggest_int('n_clusters', 2, 75)
     gamma_1 = trial.suggest_float('gamma_1', 0.2, 2., log=False)
-    gamma_2 = trial.suggest_float('gamma_2', 0.2, 2., log=False)
     
+    gamma_2 = trial.suggest_float('gamma_2', 0.2, 2., log=False)
+
+    tukey_lambda = 0
     if(dataset_name == "dataset1"):
         tukey_lambda = 1
     elif(dataset_name == "dataset2"):
         tukey_lambda = trial.suggest_float('lambda', 0.2, 1., log=False)
 
-    when_norm = trial.suggest_categorical("when_norm", [0, 1])
-    norm_type = trial.suggest_categorical("norm_type", [0, 1])
-    reg_type = trial.suggest_categorical("reg_type", [1, 2])
-    lr = trial.suggest_float('lr', 0.0005, 1., log=True)
-    use_sigmoid = trial.suggest_categorical("use_sigmoid", [True, False])
-    sigmoid_x = trial.suggest_float('sigmoid_x', 0.1, 10.)
-    reg_lambda = trial.suggest_float('reg_lambda', .0001, 1, log=True)
-    add_prev_centroids = trial.suggest_categorical("add_prev_centroids", [True, False])
+    reg_type = 0 #trial.suggest_categorical("reg_type", [1, 2])
+    lr = trial.suggest_float('lr', 0.0005, 0.1, log=True)
+    use_tanh = trial.suggest_categorical("use_tanh", [True, False])
+    tanh_x = trial.suggest_float('tanh_x', 0.1, 10.)
+    use_standardization = trial.suggest_categorical("use_standardization",[True,False])
+    #reg_lambda = trial.suggest_float('reg_lambda', .0001, 1, log=True)
+    add_prev_centroids = True #trial.suggest_categorical("add_prev_centroids", [True, False])
     only_prev_centroids = trial.suggest_categorical("only_prev_centroids", [True, False])
-    repeat_prev_centroid = trial.suggest_int('repeat_prev_centroid', 1, 5)
-    optimizer_type = trial.suggest_categorical('optimizer_type', ['NAdam', 'RMSprop', 'Adam'])
-    dataloader_batch_size = 2 ** trial.suggest_int('dataloader_batch_size', 6, 10)
+    new_old_ratio = trial.suggest_float("new_old_ratio",0.02,0.98);
+    dataloader_batch_size = 64 #2 ** trial.suggest_int('dataloader_batch_size', 6, 10)
     ###
 
     # KNN metric:
@@ -92,40 +96,41 @@ def objective(trial, dataset_name):
 
     # Initialize KMeans and KNNClassifier with defined metrics
     kmeans = KMeans(n_clusters=n_clusters, metric=knn_metric)
-    clf = GradKNNClassifier(n_points=n_points,
+    clf = GradKNNClassifier(metric=metric,
+                            is_normalization = True,
+                            tukey_lambda = tukey_lambda,
+                            kmeans = kmeans,
+                            device = device,
+                            batch_size = 64,
+                            
+                            n_points=n_points,
                             mode=1,
-                            metric=metric,
-                            is_normalization=True,
-                            tukey_lambda=tukey_lambda,
-                            num_epochs=300,
-                            reg_type=reg_type,
-                            reg_lambda=reg_lambda,
+                            num_epochs=100,
                             lr=lr,
-                            kmeans=kmeans,
-                            device=device,
-                            batch_size=64,
-                            early_stop_patience=10,
-                            train_previous=True,
-                            use_sigmoid=use_sigmoid,
-                            sigmoidx=sigmoid_x,
-                            when_norm=when_norm,
-                            norm_type=norm_type,
-                            add_prev_centroids=add_prev_centroids,
-                            only_prev_centroids=only_prev_centroids,
-                            repeat_prev_centroid=repeat_prev_centroid,
-                            optimizer_type=optimizer_type,
-                            dataloader_batch_size=dataloader_batch_size,
+                            early_stop_patience = 10,
+                            train_previous = True,
+                            reg_type = 0,
+                            reg_lambda = 0,
+                            use_tanh=use_tanh,
+                            tanh_x=tanh_x,
+                            add_centroids = True,
+                            only_prev_centroids = only_prev_centroids,
+                            new_old_ratio = new_old_ratio,
+                            dataloader_batch_size = 64,
                             verbose=False)
 
     # Train the classifier and return accuracy
     accuracy = DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=n_tasks,
                                 only_last=only_last, verbose=False)
+    
+    print(accuracy, "XD")
 
     return accuracy
 
 if __name__ == "__main__":
     args = parse_args()
 
+    dataset_name = args.dataset
     
     device = DatasetRun.get_device()
     folder_name = f'./data/{args.dataset}'
@@ -146,7 +151,7 @@ if __name__ == "__main__":
 
     # Start the study
     print("Starting the hyperparameter search for study:", args.study_name)
-    DatasetRun.grid_search(objective=objective_with_args,
+    DatasetRun.grid_search(objective=objective,
                         study_name=args.study_name,
                         n_trials=n_trials,
                         sampler=sampler,

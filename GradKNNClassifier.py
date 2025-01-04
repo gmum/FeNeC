@@ -77,7 +77,7 @@ class GradKNNClassifier(Classifier):
         wandb.login(key=api_key)
 
         wandb.init(
-            project="gradknntest",
+            project="gradknntest1",
             config = {**locals(), **kwargs}
         )
 
