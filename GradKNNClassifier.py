@@ -56,6 +56,7 @@ class GradKNNClassifier(Classifier):
         self.only_prev_centroids = only_prev_centroids
         self.new_old_ratio = new_old_ratio
         self.dataloader_batch_size = dataloader_batch_size
+        self.study_name = study_name
         self.verbose = verbose
 
         self.task_boundaries = torch.tensor([0])  # Tracks class boundaries for normalization
@@ -282,7 +283,7 @@ class GradKNNClassifier(Classifier):
             # Early stopping logic: track and compare validation loss.
             if avg_valid_loss < best_validation_loss:
                 # Save the best data for early stopping (commented out for faster runs, as it shouldn't change much)
-                torch.save(self.parameters.state_dict(), "parameters.pth")
+                torch.save(self.parameters.state_dict(), f"{self.study_name}.pth")
                 best_validation_loss = avg_valid_loss
                 epochs_no_improve = 0
             else:
@@ -294,7 +295,7 @@ class GradKNNClassifier(Classifier):
                 print(f"Early Stopping at Epoch [{epoch + 1}/{self.num_epochs}]: Accuracy = {valid_accuracy:.2f}%, "
                       f"Loss = {valid_loss / len(valid_dataloader):.4f},")
                 # Load the best data (commented out for faster runs, as it shouldn't change much)
-                self.parameters.load_state_dict(torch.load("parameters.pth", weights_only=True))
+                self.parameters.load_state_dict(torch.load(f"{self.study_name}.pth", weights_only=True))
                 break
 
     def prepare_dataloader(self):
