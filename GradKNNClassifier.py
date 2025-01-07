@@ -479,6 +479,7 @@ class GradKNNClassifier(Classifier):
                 "a": parameters["a"].item(),
                 "b": parameters["b"].item(),
             }
+            wandb.log(data)
 
         elif self.mode == 1:
 
