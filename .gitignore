@@ -1,5 +1,9 @@
 /data/
 /results/
 /.idea/
-wandb_key.txt
 /wandb/
+/__pycache__/
+
+*.pth
+
+wandb_key.txt

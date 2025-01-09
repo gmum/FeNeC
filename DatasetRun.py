@@ -1,6 +1,7 @@
 """
 A file containing functions used for testing, running models, and performing grid search using Optuna.
 """
+from GradKNNClassifier import GradKNNClassifier
 
 import math
 import sys
@@ -12,6 +13,7 @@ import numpy as np
 import optuna
 import pandas as pd
 import torch
+import wandb
 
 # Path to the Optuna database for storing study results
 OPTUNA_DB_PATH = 'sqlite:///./results/optuna_study.db'
@@ -30,7 +32,7 @@ def is_jupyter():
     return 'ipykernel' in sys.modules
 
 
-def train(clf, folder_name, n_tasks, only_last=False, verbose=False):
+def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose=0):
     """
     Trains a classifier on a series of tasks, optionally testing on the test set after each task.
 
@@ -39,13 +41,32 @@ def train(clf, folder_name, n_tasks, only_last=False, verbose=False):
      - folder_name (str): Path to the folder containing the HDF5 task files.
      - n_tasks (int): Number of tasks to train on.
      - only_last (bool): If True, evaluate on the test set only for the last task. If False, evaluate on all tasks.
-     - verbose (bool): If True, print task details and timing information.
+     - study_name (str): Name of the Optuna study for logging(only used if verbose >= 2).
+     - verbose (int): Verbosity level for logging.
 
     Returns:
      - float: The accuracy on the final task.
     """
+
     device = clf.device
     task_sizes = []
+
+
+    # Initialize W&B logging if verbose is high enough and the classifier is a GradKNNClassifier
+    if verbose >= 2 and isinstance(clf, GradKNNClassifier):
+        
+        if(study_name is None):
+            raise ValueError("study_name must be provided for logging")
+
+        with open("wandb_key.txt", "r") as key_file:
+            api_key = key_file.read().strip()
+
+        # Login to W&B using the key
+        wandb.login(key=api_key)
+        wandb.init(
+            project=study_name,
+            config=clf.get_config(),
+        )
 
     # Loop over the tasks to train and test the classifier.
     for task_number in range(n_tasks):
@@ -77,11 +98,16 @@ def train(clf, folder_name, n_tasks, only_last=False, verbose=False):
                 pred = clf.predict(X_test)
                 accuracy = clf.accuracy_score(y_test, pred, verbose=verbose, task_sizes=task_sizes)
 
-                if verbose:
+                if verbose >= 1:
                     end = time.time()
                     print(f'task {task_number}: (time: {(end - start):.4f}s)')
                     print(f"FeCAM accuracy: {f['info'].attrs['accuracy']:.4f}; My accuracy: {accuracy:.4f}")
+                if verbose >= 2:
+                    wandb.log({"task": task_number, "accuracy": accuracy})
 
+    # Finish the W&B run if verbose is high enough
+    if verbose >= 2 and isinstance(clf, GradKNNClassifier):
+        wandb.finish()
     return accuracy
 
 
