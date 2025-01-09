@@ -4,6 +4,8 @@ import pandas as pd
 import torch
 from sklearn.metrics import precision_recall_fscore_support as score
 
+from KMeans import KMeans
+
 
 class Classifier(abc.ABC):
     def __init__(self, metric, is_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=8):
@@ -62,8 +64,15 @@ class Classifier(abc.ABC):
         self.metric.preprocess(self.D)  # Preprocess for the distance metric.
 
         if self.kmeans is not None:
-            self.kmeans.metric_preprocess(self.D)  # Preprocess data for KMeans metric (used for Mahalanobis).
-            D_centroids = self.kmeans.fit_predict(D_centroids)  # Perform KMeans clustering.
+            if isinstance(self.kmeans, KMeans):  # If it's the custom implementation of KMeans:
+                self.kmeans.metric_preprocess(self.D)  # Preprocess data for KMeans metric (used for Mahalanobis).
+                D_centroids = self.kmeans.fit_predict(D_centroids)  # Perform KMeans clustering.
+            else:  # Otherwise, if using sklearn's implementation:
+                # Perform KMeans clustering for each class separately and stack the results into a tensor.
+                D_centroids = torch.stack([torch.tensor(self.kmeans.fit(d_class).cluster_centers_).to(self.device)
+                                           for d_class in D_centroids.cpu().numpy()])
+                if self.tukey_lambda != 1:
+                    D_centroids = torch.clip(D_centroids, min=0)
 
         D_centroids = self.apply_tukey(D_centroids)  # Apply Tukey transformation to centroids.
         if self.is_normalization:
@@ -154,38 +163,27 @@ class Classifier(abc.ABC):
         return torch.stack([torch.stack(D[i]) for i in range(n_classes)]).type(torch.float32).to(X.device)
 
     @staticmethod
-    def accuracy_score(y_true, pred, verbose=False):
+    def accuracy_score(y_true, pred, verbose=False, task_sizes=None):
         """ Calculates the accuracy score. """
-
-        if verbose:
-            n_classes = (y_true.max() + 1).int().item()
-            n_tasks = n_classes // 10
-            task_y_true = y_true // 10
-            task_pred = pred // 10
+        if verbose and task_sizes is not None:
             precision, recall, fscore, support = score(y_true.detach().cpu().numpy(), pred.detach().cpu().numpy())
 
-            # TODO: currently, accuracy is the same as recall, should it work that way?
-            # conf_matrix = sklearn.metrics.confusion_matrix(y_true.detach().cpu().numpy(), pred.detach().cpu().numpy())
-            # accuracy = conf_matrix.diagonal() / conf_matrix.sum(axis=1)
+            prev_task_size = 0
+            precision_tasks, recall_tasks, fscore_tasks, p_answers_tasks = [], [], [], []
+            for task in task_sizes:
+                precision_tasks.append(precision[prev_task_size:prev_task_size + task].mean())
+                recall_tasks.append(recall[prev_task_size:prev_task_size + task].mean())
+                fscore_tasks.append(fscore[prev_task_size:prev_task_size + task].mean())
+                p_answers_tasks.append(((prev_task_size <= pred) & (pred < prev_task_size + task)).sum() / len(y_true))
+                prev_task_size += task
 
-            tasks = sorted(set(task_y_true.detach().cpu().numpy()))
             # Create DataFrame for formatted output
-            data = {
-                "Task": tasks,
-                "Precision": [f"{p * 100:.0f}%" for p in precision.reshape(-1, 10).mean(1)],
-                "Recall": [f"{r * 100:.0f}%" for r in recall.reshape(-1, 10).mean(1)],
-                "FScore": [f"{f:.2f}" for f in fscore.reshape(-1, 10).mean(1)],
-                # "Accuracy": [f"{f:.2f}" for f in accuracy.reshape(-1, 10).mean(1)],
-                "% of all Answers": [f"{((task_pred == task).sum() + 1e-16) / len(task_pred) * 100:.2f}%"
-                                     for task in tasks],
-            }
+            df = pd.DataFrame({"Task": list(range(len(task_sizes))),
+                               "Precision": [f"{p * 100:.2f}%" for p in precision_tasks],
+                               "Recall": [f"{r * 100:.2f}%" for r in recall_tasks],
+                               "FScore": [f"{f:.2f}" for f in fscore_tasks],
+                               "% of all Answers": [f"{p * 100:.2f}%" for p in p_answers_tasks]})
 
-            if verbose > 1:
-                for i in range(10):
-                    data.update({f"Class {i}": [f"{((pred == (10 * task + i)).sum() + 1e-16) / len(pred) * 100:.2f}%"
-                                                for task in tasks]})
-
-            df = pd.DataFrame(data)
             print(df.to_markdown(index=False))
 
         return torch.sum(torch.eq(y_true, pred)).item() / len(y_true) * 100

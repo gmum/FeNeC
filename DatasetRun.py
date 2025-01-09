@@ -45,6 +45,7 @@ def train(clf, folder_name, n_tasks, only_last=False, verbose=False):
      - float: The accuracy on the final task.
     """
     device = clf.device
+    task_sizes = []
 
     # Loop over the tasks to train and test the classifier.
     for task_number in range(n_tasks):
@@ -60,12 +61,13 @@ def train(clf, folder_name, n_tasks, only_last=False, verbose=False):
 
             # Group training samples by class
             D = torch.concat([X_train[y_train == y_class].unsqueeze(0) for y_class in y_train.unique()])
-
-            if verbose:
-                start = time.time()  # Track the time for performance analysis.
+            task_sizes.append(D.size(0))
 
             # Determine whether to train the classifier (if required) and later use it for prediction
             should_predict = (not only_last or task_number == n_tasks - 1)
+
+            if should_predict and verbose:
+                start = time.time()  # Track the time for performance analysis.
 
             # Fit the classifier to the grouped data
             clf.fit(D, task_num=task_number, train=should_predict)
@@ -73,12 +75,12 @@ def train(clf, folder_name, n_tasks, only_last=False, verbose=False):
             # If prediction is enabled, generate predictions and calculate accuracy on the test set
             if should_predict:
                 pred = clf.predict(X_test)
-                accuracy = clf.accuracy_score(y_test, pred, verbose=verbose)
+                accuracy = clf.accuracy_score(y_test, pred, verbose=verbose, task_sizes=task_sizes)
 
-            if verbose:
-                end = time.time()
-                print(f'task {task_number}: (time: {(end - start):.4f}s)')
-                print(f"FeCAM accuracy: {f['info'].attrs['accuracy']:.4f}; My accuracy: {accuracy:.4f}")
+                if verbose:
+                    end = time.time()
+                    print(f'task {task_number}: (time: {(end - start):.4f}s)')
+                    print(f"FeCAM accuracy: {f['info'].attrs['accuracy']:.4f}; My accuracy: {accuracy:.4f}")
 
     return accuracy
 
