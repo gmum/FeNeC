@@ -228,6 +228,10 @@ class GradKNNClassifier(Classifier):
                 predictions = self.gradknn_predict(data)
                 loss = F.cross_entropy(predictions, target)  # Cross-entropy loss
                 reg_loss = self.regularization()  # Regularization loss
+                #Eksperyment na jednym zestawie hiperparametrów, najlepsze z grid searcha mieć z niego accuracy, takie same wykresy, co batcha, accuracy co task, najlepsze parametry z grid searcha // MODE 1
+                #Ten zestaw który pokazywałem z reg_lambdą = 1, accuracy co task i wykresy
+                #Ten sam zestaw ale reg_lambda = 100, accuracy co task, wykrey co batch itp.
+
 
                 if self.verbose == 3:
                     wandb.log({"cross_entropy_loss": loss, "reg_loss": reg_loss, "total_loss": loss + reg_loss})

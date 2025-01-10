@@ -61,14 +61,19 @@ def objective(trial):
         shrinkage = 2
         metric_normalization = True
         centroids_normalization = True
+    elif(dataset_name == "dataset3"):
+        n_tasks = 6
+        shrinkage = 2
+        metric_normalization = True
+        centroids_normalization = True
 
+    
     optimizer = trial.suggest_categorical("optimizer", ["Adam", "SGD"])
 
-    n_points = trial.suggest_int('n_points', 1, 40)
-    # DEFINE HYPERPARAMETERS:
-    n_clusters = 70 # trial.suggest_int('n_clusters', 2, 75)
+    n_clusters = trial.suggest_int('n_clusters', 3, 75)
+    n_points = trial.suggest_int('n_points', 1,min(40,n_clusters))
+
     gamma_1 = trial.suggest_float('gamma_1', 0.2, 2., log=False)
-    
     gamma_2 = trial.suggest_float('gamma_2', 0.2, 2., log=False)
 
     tukey_lambda = 0
@@ -76,20 +81,20 @@ def objective(trial):
         tukey_lambda = 1
     elif(dataset_name == "dataset2"):
         tukey_lambda = trial.suggest_float('lambda', 0.2, 1., log=False)
+    elif(dataset_name == "dataset3"):
+        tukey_lambda = trial.suggest_float('lambda', 0.2, 1., log=False)
 
 
-    reg_type = 0 #trial.suggest_categorical("reg_type", [1, 2])
+
+    reg_type = trial.suggest_categorical("reg_type", [0, 1, 2])
+    reg_lambda = trial.suggest_float('reg_lambda', 0.0001, 1, log=True)
     lr = trial.suggest_float('lr', 0.0005, 0.1, log=True)
     use_tanh = trial.suggest_categorical("use_tanh", [True, False])
-    tanh_x = trial.suggest_float('tanh_x', 0.1, 10.)
-    use_standardization = trial.suggest_categorical("use_standardization",[True,False])
-    #reg_lambda = trial.suggest_float('reg_lambda', .0001, 1, log=True)
-    add_prev_centroids = True #trial.suggest_categorical("add_prev_centroids", [True, False])
-    only_prev_centroids = trial.suggest_categorical("only_prev_centroids", [True, False])
-    new_old_ratio = trial.suggest_float("new_old_ratio",0.02,0.98)
-    dataloader_batch_size = 64 #2 ** trial.suggest_int('dataloader_batch_size', 6, 10)
-    ###
-
+    if use_tanh:
+        tanh_x = trial.suggest_float('tanh_x', 0.1, 10.)
+    else:
+        tanh_x = None
+    centroids_new_old_ratio = trial.suggest_float("centroids_new_old_ratio",0.05,0.95)
     # KNN metric:
     metric = Metrics.MahalanobisMetric(shrinkage=shrinkage, gamma_1=gamma_1, gamma_2=gamma_2,
                                        normalization=metric_normalization)
@@ -99,36 +104,30 @@ def objective(trial):
     # Initialize KMeans and KNNClassifier with defined metrics
     kmeans = KMeans(n_clusters=n_clusters, metric=knn_metric)
     clf = GradKNNClassifier(metric=metric,
-                            is_normalization = True,
-                            tukey_lambda = tukey_lambda,
-                            kmeans = kmeans,
-                            device = device,
-                            batch_size = 64,
-                            optimizer = optimizer,
-                            n_points=n_points,
-                            mode=1,
-                            num_epochs=100,
-                            lr=lr,
-                            early_stop_patience = 10,
-                            train_previous = True,
-                            reg_type = 0,
-                            reg_lambda = 0,
-                            use_tanh=use_tanh,
-                            tanh_x=tanh_x,
-                            add_centroids = True,
-                            only_prev_centroids = only_prev_centroids,
-                            new_old_ratio = new_old_ratio,
-                            dataloader_batch_size = 64,
-                            
-                            normalization_type=2,
-                            study_name=study_name,
-                            verbose=False)
+                        is_normalization=True,
+                        tukey_lambda=tukey_lambda,
+                        kmeans=kmeans,
+                        device=device,
+                        batch_size=64,
+                        optimizer=optimizer,
+                        n_points=n_points,
+                        mode=0,
+                        num_epochs=100,
+                        lr=lr,
+                        early_stop_patience=10,
+                        reg_type=reg_type,
+                        reg_lambda=reg_lambda,
+                        normalization_type=None,
+                        tanh_x=tanh_x,
+                        centroids_new_old_ratio=centroids_new_old_ratio,#Tu w jednym dajemy na None w drugim dajemy na ten parametr
+                        dataloader_batch_size=64,
+                        study_name=study_name,
+                        verbose=2)
 
     # Train the classifier and return accuracy
     accuracy = DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=n_tasks,
-                                only_last=only_last, verbose=False)
+                                only_last=only_last, verbose=2)
     
-    print(accuracy, "XD")
 
     return accuracy
 
