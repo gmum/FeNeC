@@ -2,6 +2,7 @@ import abc
 
 import pandas as pd
 import torch
+from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support as score
 
 from KMeans import KMeans
@@ -166,22 +167,29 @@ class Classifier(abc.ABC):
     def accuracy_score(y_true, pred, verbose=False, task_sizes=None):
         """ Calculates the accuracy score. """
         if verbose and task_sizes is not None:
-            precision, recall, fscore, support = score(y_true.detach().cpu().numpy(), pred.detach().cpu().numpy())
+            precision, recall, fscore, support = score(y_true.detach().cpu().numpy(), pred.detach().cpu().numpy(),
+                                                       zero_division=0.0)
+
+            conf_matrix = confusion_matrix(y_true.detach().cpu().numpy(), pred.detach().cpu().numpy())
+            accuracy = conf_matrix.diagonal() / conf_matrix.sum(axis=1)
 
             prev_task_size = 0
-            precision_tasks, recall_tasks, fscore_tasks, p_answers_tasks = [], [], [], []
+            precision_tasks, recall_tasks, fscore_tasks, p_answers_tasks, accuracy_tasks = [], [], [], [], []
             for task in task_sizes:
                 precision_tasks.append(precision[prev_task_size:prev_task_size + task].mean())
                 recall_tasks.append(recall[prev_task_size:prev_task_size + task].mean())
                 fscore_tasks.append(fscore[prev_task_size:prev_task_size + task].mean())
                 p_answers_tasks.append(((prev_task_size <= pred) & (pred < prev_task_size + task)).sum() / len(y_true))
+                accuracy_tasks.append(accuracy[prev_task_size:prev_task_size + task].mean())
                 prev_task_size += task
 
             # Create DataFrame for formatted output
             df = pd.DataFrame({"Task": list(range(len(task_sizes))),
+                               "Class num": task_sizes,
                                "Precision": [f"{p * 100:.2f}%" for p in precision_tasks],
                                "Recall": [f"{r * 100:.2f}%" for r in recall_tasks],
                                "FScore": [f"{f:.2f}" for f in fscore_tasks],
+                               "Accuracy": [f"{a:.2f}" for a in accuracy_tasks],
                                "% of all Answers": [f"{p * 100:.2f}%" for p in p_answers_tasks]})
 
             print(df.to_markdown(index=False))
