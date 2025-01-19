@@ -119,14 +119,14 @@ def objective(trial):
                         reg_lambda=reg_lambda,
                         normalization_type=None,
                         tanh_x=tanh_x,
-                        centroids_new_old_ratio=centroids_new_old_ratio,#Tu w jednym dajemy na None w drugim dajemy na ten parametr
+                        centroids_new_old_ratio=None,#Tu w jednym dajemy na None w drugim dajemy na ten parametr
                         dataloader_batch_size=32,
                         study_name=study_name,
                         verbose=2)
 
     # Train the classifier and return accuracy
     accuracy = DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=n_tasks,
-                                only_last=only_last,study_name=study_name, verbose=2)
+                                only_last=only_last,study_name = study_name,verbose=2)
     
 
     return accuracy
