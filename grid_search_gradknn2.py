@@ -108,7 +108,7 @@ def objective(trial):
                         tukey_lambda=tukey_lambda,
                         kmeans=kmeans,
                         device=device,
-                        batch_size=64,
+                        batch_size=32,
                         optimizer=optimizer,
                         n_points=n_points,
                         mode=0,
@@ -120,13 +120,13 @@ def objective(trial):
                         normalization_type=None,
                         tanh_x=tanh_x,
                         centroids_new_old_ratio=None,#Tu w jednym dajemy na None w drugim dajemy na ten parametr
-                        dataloader_batch_size=64,
+                        dataloader_batch_size=32,
                         study_name=study_name,
                         verbose=2)
 
     # Train the classifier and return accuracy
     accuracy = DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=n_tasks,
-                                only_last=only_last, verbose=2)
+                                only_last=False,study_name = study_name,verbose=2)
     
 
     return accuracy
