@@ -62,6 +62,7 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose
             api_key = key_file.read().strip()
 
         # Login to W&B using the key
+        #get cofig from clf
         wandb.login(key=api_key)
         wandb.init(
             project=study_name,

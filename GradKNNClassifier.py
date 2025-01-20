@@ -58,6 +58,10 @@ class GradKNNClassifier(Classifier):
         self.verbose = verbose
 
         self.config = {key: value for key, value in {**locals(), **kwargs}.items() if isinstance(value, (str, int, float, bool))}
+
+        self.config.update(self.kmeans.get_config())
+
+
         self.task_boundaries = torch.tensor([0])  # Tracks class boundaries for normalization
 
         self.already_trained = False

@@ -20,6 +20,9 @@ class KMeans:
         self.tol = tol
         self.metric = metric
         self.seed = seed
+        self.config = {'n_clusters': n_clusters, 'max_iter': max_iter, 'tol': tol, 'metric': metric, 'seed': seed}
+        if isinstance(metric, Metrics.MahalanobisMetric):
+            self.config.update(metric.get_config())
 
     def metric_preprocess(self, D):
         """ Preprocess metric: currently only used for Mahalanobis Metric """
@@ -104,3 +107,6 @@ class KMeans:
 
         # Return the final centroids
         return centroids
+    def get_config(self):
+        """ Returns the configuration of the KMeans object for W&B logging. """
+        return self.config
