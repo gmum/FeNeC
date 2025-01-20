@@ -37,8 +37,8 @@ class GradKNNClassifier(Classifier):
          - verbose (int): Controls the level of detail in logging and data saving:
             * 0: Print only essential information during execution.
             * 1: Print detailed logs and metrics to the console.
-            * 2: Save detailed logs and metrics to Weights and Biases (WandB) every epoch.
-            * 3: Save logs and metrics to W&B every batch.
+            * 2: Send to wandb only the most important metrics.
+            * 3: Save detailed logs and metrics to Weights and Biases (WandB) every epoch.
         """
         super().__init__(*args, **kwargs)
         self.optimizer = optimizer
@@ -241,8 +241,6 @@ class GradKNNClassifier(Classifier):
                 #Ten sam zestaw ale reg_lambda = 100, accuracy co task, wykrey co batch itp.
 
 
-                if self.verbose == 3:
-                    wandb.log({"cross_entropy_loss": loss, "reg_loss": reg_loss, "total_loss": loss + reg_loss})
 
                 loss += reg_loss  # Add regularization to the total loss
 
@@ -257,9 +255,6 @@ class GradKNNClassifier(Classifier):
                 correct += (predicted_classes == target).sum().item()
                 total += target.size(0)
 
-                if self.verbose == 3:
-                    avg_valid_loss, valid_accuracy = self.evaluate_validation(valid_dataloader)
-                    wandb.log({"valid_loss": avg_valid_loss, "valid_accuracy": valid_accuracy})
 
             # Calculate and display epoch metrics (accuracy and loss)
             avg_valid_loss, valid_accuracy = self.evaluate_validation(valid_dataloader)
@@ -270,12 +265,11 @@ class GradKNNClassifier(Classifier):
                     print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
                           f"Loss = {avg_valid_loss:.4f},")
                     
-            if self.verbose == 2:
+            if self.verbose == 3:
                 wandb.log({"cross_entropy_loss": epoch_loss / len(train_dataloader), "reg_loss": reg_loss,
                            "total_loss": loss + reg_loss})
                 wandb.log({"valid_loss": avg_valid_loss, "valid_accuracy": valid_accuracy})
-
-            self.save_task_data(self.D_centroids.size(0), epoch, self.parameters)
+                self.save_task_data(self.D_centroids.size(0), epoch, self.parameters)
 
 
             # Early stopping logic: track and compare validation loss.

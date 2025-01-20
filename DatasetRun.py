@@ -67,7 +67,7 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose
             project=study_name,
             config=clf.get_config(),
             settings=wandb.Settings(init_timeout=300)
-            )
+        )
 
 
     accuracy_sum = 0
