@@ -289,6 +289,8 @@ class GradKNNClassifier(Classifier):
                 # Load the best data
                 self.parameters.load_state_dict(torch.load(f"{self.study_name}.pth", weights_only=True))
                 break
+        if self.verbose == 2:
+            self.save_task_data(self.D_centroids.size(0), 0, self.parameters)
 
     def prepare_dataloader(self):
         """
