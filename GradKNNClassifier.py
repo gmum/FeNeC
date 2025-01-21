@@ -4,6 +4,7 @@ import wandb
 from torch.utils.data import DataLoader, TensorDataset, ConcatDataset, random_split
 
 from Classifier import Classifier
+import Metrics
 
 
 class GradKNNClassifier(Classifier):
@@ -60,6 +61,8 @@ class GradKNNClassifier(Classifier):
         self.config = {key: value for key, value in {**locals(), **kwargs}.items() if isinstance(value, (str, int, float, bool))}
 
         self.config.update(self.kmeans.get_config())
+        if(isinstance(self.metric, Metrics.MahalanobisMetric)):
+            self.config.update(self.metric.get_config())
 
 
         self.task_boundaries = torch.tensor([0])  # Tracks class boundaries for normalization

@@ -52,8 +52,8 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose
     task_sizes = []
 
 
-    # Initialize W&B logging if verbose is high enough and the classifier is a GradKNNClassifier
-    if verbose >= 2 and isinstance(clf, GradKNNClassifier):
+    # Initialize W&B logging if verbose is high enough
+    if verbose >= 2:
         
         if(study_name is None):
             raise ValueError("study_name must be provided for logging")
@@ -113,7 +113,7 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose
     # Finish the W&B run if verbose is high enough
     if not only_last and verbose >= 2:
         wandb.log({f"average_accuracy": accuracy_sum / n_tasks})
-    if verbose >= 2 and isinstance(clf, GradKNNClassifier):
+    if verbose >= 2:
         wandb.finish()
     return accuracy
 

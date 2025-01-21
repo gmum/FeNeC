@@ -3,7 +3,7 @@ import argparse
 
 import DatasetRun
 import Metrics
-from GradKNNClassifier import GradKNNClassifier
+from KNNClassifier import KNNClassifier
 from KMeans import KMeans
 
 dataset_name = ""
@@ -68,32 +68,14 @@ def objective(trial):
         centroids_normalization = True
 
     
-    optimizer = trial.suggest_categorical("optimizer", ["Adam", "SGD"])
+      # DEFINE HYPERPARAMETERS:
+    n_clusters = trial.suggest_int('n_clusters', 1, 100)
+    n_neighbors = trial.suggest_int('n_neighbors', 1, min(50, n_clusters))
+    gamma_1 = trial.suggest_float('gamma_1', 0.001, 6., log=True)
+    gamma_2 = trial.suggest_float('gamma_2', 0.001, 6., log=True)
+    tukey_lambda = trial.suggest_float('lambda', 0.001, 3., log=True)
+    ###
 
-    n_clusters = trial.suggest_int('n_clusters', 3, 75)
-    n_points = trial.suggest_int('n_points', 1,min(40,n_clusters))
-
-    gamma_1 = trial.suggest_float('gamma_1', 0.2, 2., log=False)
-    gamma_2 = trial.suggest_float('gamma_2', 0.2, 2., log=False)
-
-    tukey_lambda = 0
-    if(dataset_name == "dataset1"):
-        tukey_lambda = 1
-    elif(dataset_name == "dataset2"):
-        tukey_lambda = trial.suggest_float('lambda', 0.2, 1., log=False)
-    elif(dataset_name == "dataset3"):
-        tukey_lambda = trial.suggest_float('lambda', 0.2, 1., log=False)
-
-
-
-    reg_type = trial.suggest_categorical("reg_type", [0, 1, 2])
-    reg_lambda = trial.suggest_float('reg_lambda', 0.0001, 1, log=True)
-    lr = trial.suggest_float('lr', 0.0005, 0.1, log=True)
-    use_tanh = trial.suggest_categorical("use_tanh", [True, False])
-    if use_tanh:
-        tanh_x = trial.suggest_float('tanh_x', 0.1, 10.)
-    else:
-        tanh_x = None
     # KNN metric:
     metric = Metrics.MahalanobisMetric(shrinkage=shrinkage, gamma_1=gamma_1, gamma_2=gamma_2,
                                        normalization=metric_normalization)
@@ -102,33 +84,12 @@ def objective(trial):
 
     # Initialize KMeans and KNNClassifier with defined metrics
     kmeans = KMeans(n_clusters=n_clusters, metric=knn_metric)
-    clf = GradKNNClassifier(metric=metric,
-                        is_normalization=True,
-                        tukey_lambda=tukey_lambda,
-                        kmeans=kmeans,
-                        device=device,
-                        batch_size=32,
-                        optimizer=optimizer,
-                        n_points=n_points,
-                        mode=0,
-                        num_epochs=350,
-                        lr=lr,
-                        early_stop_patience=10,
-                        reg_type=reg_type,
-                        reg_lambda=reg_lambda,
-                        normalization_type=None,
-                        tanh_x=tanh_x,
-                        centroids_new_old_ratio=None,#Tu w jednym dajemy na None w drugim dajemy na ten parametr
-                        train_only_on_first_task=True,
-                        dataloader_batch_size=32,
-                        study_name=study_name,
-                        verbose=2)
-
-    # Train the classifier and return accuracy
-    accuracy = DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=n_tasks,
-                                only_last=only_last,study_name = study_name,verbose=2)
+    clf = KNNClassifier(n_neighbors=n_neighbors, metric=metric, is_normalization=centroids_normalization,
+                        tukey_lambda=tukey_lambda, kmeans=kmeans, device=device)
     
 
+    accuracy = DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=n_tasks,
+                                only_last=only_last,study_name = study_name,verbose=2)
     return accuracy
 
 if __name__ == "__main__":
