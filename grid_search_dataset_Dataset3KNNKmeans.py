@@ -69,7 +69,7 @@ def objective(trial):
 
     
       # DEFINE HYPERPARAMETERS:
-    n_clusters = trial.suggest_int('n_clusters', 1, 100)
+    n_clusters = trial.suggest_int('n_clusters', 2, 100)
     n_neighbors = trial.suggest_int('n_neighbors', 1, min(50, n_clusters))
     gamma_1 = trial.suggest_float('gamma_1', 0.001, 6., log=True)
     gamma_2 = trial.suggest_float('gamma_2', 0.001, 6., log=True)
@@ -89,7 +89,7 @@ def objective(trial):
     
 
     accuracy = DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=n_tasks,
-                                only_last=only_last,study_name = study_name,verbose=2)
+                                only_last=False,study_name = study_name,verbose=2)
     return accuracy
 
 if __name__ == "__main__":
