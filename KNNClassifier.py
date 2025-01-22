@@ -17,7 +17,7 @@ class KNNClassifier(Classifier):
 
         self.config = {key: value for key, value in {**locals(), **kwargs}.items() if isinstance(value, (str, int, float, bool))}
 
-        self.config.update(self.kmeans.get_config())
+        #self.config.update(self.kmeans.get_config())
         if(isinstance(self.metric, Metrics.MahalanobisMetric)):
             self.config.update(self.metric.get_config())
 
