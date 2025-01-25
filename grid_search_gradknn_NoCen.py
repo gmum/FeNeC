@@ -109,7 +109,7 @@ def objective(trial):
                         normalization_type=None,
                         tanh_x=None,
                         centroids_new_old_ratio=None,#Tu w jednym dajemy na None w drugim dajemy na ten parametr
-                        train_only_on_first_task=True,
+                        train_only_on_first_task=False,
                         dataloader_batch_size=64,
                         study_name=study_name,
                         verbose=2)
