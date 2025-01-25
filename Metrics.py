@@ -90,6 +90,7 @@ class MahalanobisMetric(Metric):
         self.gamma_2 = gamma_2
         self.normalization = normalization
         self.is_first_preprocess = True
+        self.config = {'shrinkage': shrinkage, 'gamma_1': gamma_1, 'gamma_2': gamma_2, 'normalization': normalization}
 
     def preprocess(self, D):
         """
@@ -173,3 +174,7 @@ class MahalanobisMetric(Metric):
 
     def reset(self):
         self.is_first_preprocess = True
+
+    def get_config(self):
+        """Get the configuration of the metric for WandB logging."""
+        return self.config

@@ -52,8 +52,8 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose
     task_sizes = []
 
 
-    # Initialize W&B logging if verbose is high enough and the classifier is a GradKNNClassifier
-    if verbose >= 2 and isinstance(clf, GradKNNClassifier):
+    # Initialize W&B logging if verbose is high enough
+    if verbose >= 2:
         
         if(study_name is None):
             raise ValueError("study_name must be provided for logging")
@@ -62,12 +62,16 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose
             api_key = key_file.read().strip()
 
         # Login to W&B using the key
+        #get cofig from clf
         wandb.login(key=api_key)
         wandb.init(
             project=study_name,
             config=clf.get_config(),
+            settings=wandb.Settings(init_timeout=300)
         )
 
+
+    accuracy_sum = 0
     # Loop over the tasks to train and test the classifier.
     for task_number in range(n_tasks):
         current_file = f"{folder_name}/task_{task_number}.hdf5"
@@ -89,7 +93,7 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose
 
             if should_predict and verbose:
                 start = time.time()  # Track the time for performance analysis.
-
+            
             # Fit the classifier to the grouped data
             clf.fit(D, task_num=task_number, train=should_predict)
 
@@ -97,16 +101,19 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose
             if should_predict:
                 pred = clf.predict(X_test)
                 accuracy = clf.accuracy_score(y_test, pred, verbose=verbose, task_sizes=task_sizes)
+                accuracy_sum += accuracy
 
                 if verbose >= 1:
                     end = time.time()
                     print(f'task {task_number}: (time: {(end - start):.4f}s)')
                     print(f"FeCAM accuracy: {f['info'].attrs['accuracy']:.4f}; My accuracy: {accuracy:.4f}")
                 if verbose >= 2:
-                    wandb.log({"task": task_number, "accuracy": accuracy})
+                    wandb.log({"task": task_number, f"task_{task_number}_accuracy": accuracy})
 
     # Finish the W&B run if verbose is high enough
-    if verbose >= 2 and isinstance(clf, GradKNNClassifier):
+    if not only_last and verbose >= 2:
+        wandb.log({f"average_accuracy": accuracy_sum / n_tasks})
+    if verbose >= 2:
         wandb.finish()
     return accuracy
 
@@ -144,10 +151,6 @@ def grid_search(objective, study_name, n_trials, sampler=optuna.samplers.TPESamp
     # Perform the hyperparameter optimization
     study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs)
 
-    # Print the best results if verbosity is high enough
-    if verbose >= 3:
-        print("Best hyperparameters: ", study.best_params)
-        print("Best accuracy: ", study.best_value)
 
 
 def save_to_csv(study_name, path='./results/', only_complete=True):

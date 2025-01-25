@@ -4,11 +4,12 @@ import wandb
 from torch.utils.data import DataLoader, TensorDataset, ConcatDataset, random_split
 
 from Classifier import Classifier
+import Metrics
 
 
 class GradKNNClassifier(Classifier):
     def __init__(self, optimizer="Adam", n_points=10, mode=0, num_epochs=100, lr=1e-3, early_stop_patience=10,
-                 reg_type=None, reg_lambda=None, normalization_type=None, tanh_x=None, centroids_new_old_ratio=None,
+                 reg_type=None, reg_lambda=None, normalization_type=None, tanh_x=None, centroids_new_old_ratio=None, train_only_on_first_task=False,
                  dataloader_batch_size=64, study_name="GradKNNClassifier", verbose=True, *args, **kwargs):
         """
         Initializes the GradKNNClassifier.
@@ -31,13 +32,14 @@ class GradKNNClassifier(Classifier):
             * 2: Use normalization.
          - centroids_new_old_ratio (float): Ratio of new task samples to old task centroids in training
                                             (If 'None', then don't apply centroids).
+         - train_only_on_first_task (bool): If True, train only on the first task.
          - dataloader_batch_size (int): Batch size for the DataLoader.
          - study_name (string): Name of the wandb study.
          - verbose (int): Controls the level of detail in logging and data saving:
             * 0: Print only essential information during execution.
             * 1: Print detailed logs and metrics to the console.
-            * 2: Save detailed logs and metrics to Weights and Biases (WandB) every epoch.
-            * 3: Save logs and metrics to W&B every batch.
+            * 2: Send to wandb only the most important metrics.
+            * 3: Save detailed logs and metrics to Weights and Biases (WandB) every epoch.
         """
         super().__init__(*args, **kwargs)
         self.optimizer = optimizer
@@ -51,13 +53,21 @@ class GradKNNClassifier(Classifier):
         self.tanh_x = tanh_x
         self.normalization_type = normalization_type
         self.centroids_new_old_ratio = centroids_new_old_ratio
+        self.train_only_on_first_task = train_only_on_first_task
         self.dataloader_batch_size = dataloader_batch_size
         self.study_name = study_name
         self.verbose = verbose
 
-        self.config = {**locals(), **kwargs}
+        self.config = {key: value for key, value in {**locals(), **kwargs}.items() if isinstance(value, (str, int, float, bool))}
+
+        self.config.update(self.kmeans.get_config())
+        if(isinstance(self.metric, Metrics.MahalanobisMetric)):
+            self.config.update(self.metric.get_config())
+
 
         self.task_boundaries = torch.tensor([0])  # Tracks class boundaries for normalization
+
+        self.already_trained = False
 
         # Initialize parameters
         self.parameters = torch.nn.ParameterDict()
@@ -193,6 +203,11 @@ class GradKNNClassifier(Classifier):
 
     def train(self):
         """ Main training loop for the classifier. """
+        
+        if(self.already_trained):
+            return
+        self.already_trained = True
+        
         # Prepare the DataLoaders for training and validation
         train_dataloader, train_dataloader_sec, valid_dataloader = self.prepare_dataloader()
 
@@ -233,8 +248,6 @@ class GradKNNClassifier(Classifier):
                 #Ten sam zestaw ale reg_lambda = 100, accuracy co task, wykrey co batch itp.
 
 
-                if self.verbose == 3:
-                    wandb.log({"cross_entropy_loss": loss, "reg_loss": reg_loss, "total_loss": loss + reg_loss})
 
                 loss += reg_loss  # Add regularization to the total loss
 
@@ -249,9 +262,6 @@ class GradKNNClassifier(Classifier):
                 correct += (predicted_classes == target).sum().item()
                 total += target.size(0)
 
-                if self.verbose == 3:
-                    avg_valid_loss, valid_accuracy = self.evaluate_validation(valid_dataloader)
-                    wandb.log({"valid_loss": avg_valid_loss, "valid_accuracy": valid_accuracy})
 
             # Calculate and display epoch metrics (accuracy and loss)
             avg_valid_loss, valid_accuracy = self.evaluate_validation(valid_dataloader)
@@ -262,12 +272,11 @@ class GradKNNClassifier(Classifier):
                     print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
                           f"Loss = {avg_valid_loss:.4f},")
                     
-            if self.verbose == 2:
+            if self.verbose == 3:
                 wandb.log({"cross_entropy_loss": epoch_loss / len(train_dataloader), "reg_loss": reg_loss,
                            "total_loss": loss + reg_loss})
                 wandb.log({"valid_loss": avg_valid_loss, "valid_accuracy": valid_accuracy})
-
-            self.save_task_data(self.D_centroids.size(0), epoch, self.parameters)
+                self.save_task_data(self.D_centroids.size(0), epoch, self.parameters)
 
 
             # Early stopping logic: track and compare validation loss.
@@ -287,6 +296,8 @@ class GradKNNClassifier(Classifier):
                 # Load the best data
                 self.parameters.load_state_dict(torch.load(f"{self.study_name}.pth", weights_only=True))
                 break
+        if self.verbose == 2:
+            self.save_task_data(self.D_centroids.size(0), 0, self.parameters)
 
     def prepare_dataloader(self):
         """
