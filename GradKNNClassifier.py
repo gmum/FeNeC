@@ -204,7 +204,7 @@ class GradKNNClassifier(Classifier):
     def train(self):
         """ Main training loop for the classifier. """
         
-        if(self.already_trained):
+        if(self.already_trained and train_only_on_first_task):
             return
         self.already_trained = True
         
