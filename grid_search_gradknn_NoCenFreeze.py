@@ -82,6 +82,9 @@ def objective(trial):
     elif(dataset_name == "dataset3"):
         tukey_lambda = trial.suggest_float('lambda', 0.2, 1., log=False)
 
+    activation = trial.suggest_categorical("activation", ["LeakyReLu", "Sigmoid"])
+
+    leaky = trial.suggest_float('leaky', 0.001, 0.3, log=False)
 
     lr = trial.suggest_float('lr', 0.0005, 0.1, log=True)
     # KNN metric:sq
@@ -97,7 +100,7 @@ def objective(trial):
                         tukey_lambda=tukey_lambda,
                         kmeans=kmeans,
                         device=device,
-                        batch_size=64,
+                        batch_size=16,
                         optimizer="SGD",
                         n_points=n_points,
                         mode=0,
@@ -111,6 +114,9 @@ def objective(trial):
                         centroids_new_old_ratio=None,#Tu w jednym dajemy na None w drugim dajemy na ten parametr
                         train_only_on_first_task=True,
                         dataloader_batch_size=64,
+                        activation=activation,
+                        leaky=leaky,
+                        is_alpha=False,
                         study_name=study_name,
                         verbose=2)
 
