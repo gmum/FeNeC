@@ -1,7 +1,6 @@
 import torch
 
 from Classifier import Classifier
-import Metrics
 
 
 class KNNClassifier(Classifier):
@@ -15,12 +14,6 @@ class KNNClassifier(Classifier):
         super().__init__(*args, **kwargs)
         self.n_neighbors = n_neighbors
 
-        self.config = {key: value for key, value in {**locals(), **kwargs}.items() if isinstance(value, (str, int, float, bool))}
-
-        #self.config.update(self.kmeans.get_config())
-        if(isinstance(self.metric, Metrics.MahalanobisMetric)):
-            self.config.update(self.metric.get_config())
-
     def model_predict(self, distances):
         # Get the distances and indices of the k closest training samples
         values, indices = torch.topk(distances.flatten(1, 2), self.n_neighbors, sorted=False, largest=False)
@@ -33,7 +26,3 @@ class KNNClassifier(Classifier):
 
         # Return the class with the highest aggregated score for each test sample
         return classes.argmax(1)
-    
-
-    def get_config(self):
-        return self.config

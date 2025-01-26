@@ -5,11 +5,13 @@ import torch
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support as score
 
+import Metrics
 from KMeans import KMeans
 
 
 class Classifier(abc.ABC):
-    def __init__(self, metric, is_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=8):
+    def __init__(self, metric, is_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=8,
+                 *args, **kwargs):
         """
         Initializes the Classifier.
 
@@ -28,6 +30,14 @@ class Classifier(abc.ABC):
         self.device = device
         self.batch_size = batch_size
         self.is_first_fit = True
+
+        # Configure wandb with local and keyword arguments of valid types.
+        self.config = {key: value for key, value in {**locals(), **kwargs}.items() if
+                       isinstance(value, (str, int, float, bool))}
+        if isinstance(self.kmeans, KMeans):
+            self.config.update(self.kmeans.get_config())
+        if isinstance(self.metric, Metrics.MahalanobisMetric):
+            self.config.update(self.metric.get_config())
 
     def apply_tukey(self, T):
         """ Applies Tukey’s Ladder of Powers transformation to the tensor T. """
@@ -124,6 +134,13 @@ class Classifier(abc.ABC):
             X = self.data_normalization(X)
 
         return self.metric.calculate_batch(self.model_predict, self.D_centroids, X, self.batch_size)
+
+    def get_config(self):
+        """
+        Returns:
+         - config (dict): Dictionary containing local variables and keyword arguments.
+        """
+        return self.config
 
     @staticmethod
     def data_normalization(T, epsilon=1e-8):

@@ -1,7 +1,6 @@
 """
 A file containing functions used for testing, running models, and performing grid search using Optuna.
 """
-from GradKNNClassifier import GradKNNClassifier
 
 import math
 import sys
@@ -32,7 +31,7 @@ def is_jupyter():
     return 'ipykernel' in sys.modules
 
 
-def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose=0):
+def train(clf, folder_name, n_tasks, only_last=False, study_name=None, verbose=0):
     """
     Trains a classifier on a series of tasks, optionally testing on the test set after each task.
 
@@ -51,27 +50,22 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose
     device = clf.device
     task_sizes = []
 
-
     # Initialize W&B logging if verbose is high enough
     if verbose >= 2:
-        
-        if(study_name is None):
+        if study_name is None:
             raise ValueError("study_name must be provided for logging")
 
         with open("wandb_key.txt", "r") as key_file:
             api_key = key_file.read().strip()
 
-        # Login to W&B using the key
-        #get cofig from clf
+        # Login to W&B using the key and get config from clf
         wandb.login(key=api_key)
-        wandb.init(
-            project=study_name,
-            config=clf.get_config(),
-            settings=wandb.Settings(init_timeout=300)
-        )
-
+        wandb.init(project=study_name,
+                   config=clf.get_config(),
+                   settings=wandb.Settings(init_timeout=300))
 
     accuracy_sum = 0
+
     # Loop over the tasks to train and test the classifier.
     for task_number in range(n_tasks):
         current_file = f"{folder_name}/task_{task_number}.hdf5"
@@ -93,9 +87,9 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose
 
             if should_predict and verbose:
                 start = time.time()  # Track the time for performance analysis.
-            
+
             # Fit the classifier to the grouped data
-            clf.fit(D, task_num=task_number, train=should_predict)
+            clf.fit(D, task_num=task_number, train=should_predict, study_name=study_name)
 
             # If prediction is enabled, generate predictions and calculate accuracy on the test set
             if should_predict:
@@ -111,9 +105,9 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name = None, verbose
                     wandb.log({"task": task_number, f"task_{task_number}_accuracy": accuracy})
 
     # Finish the W&B run if verbose is high enough
-    if not only_last and verbose >= 2:
-        wandb.log({f"average_accuracy": accuracy_sum / n_tasks})
     if verbose >= 2:
+        if not only_last:
+            wandb.log({f"average_accuracy": accuracy_sum / n_tasks})
         wandb.finish()
     return accuracy
 
@@ -150,7 +144,6 @@ def grid_search(objective, study_name, n_trials, sampler=optuna.samplers.TPESamp
 
     # Perform the hyperparameter optimization
     study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs)
-
 
 
 def save_to_csv(study_name, path='./results/', only_complete=True):
@@ -353,3 +346,27 @@ def plot_gradknn_parameters(classes, file_path='data.csv', n_cols=3, row_height=
     # Adjust layout
     plt.tight_layout()
     plt.show()
+
+
+def analyze_hyperparameter_importance(study_name):
+    """
+    Analyzes hyperparameter importance for a given Optuna study.
+
+    Parameters:
+     - study_name (str): Name of the Optuna study in the database.
+    """
+    # Load the study
+    study = optuna.load_study(study_name=study_name, storage=OPTUNA_DB_PATH)
+
+    # Compute hyperparameter importance
+    param_importance = optuna.importance.get_param_importances(study)
+
+    # Print the importance of each hyperparameter
+    print("Hyperparameter importance:")
+    for param, importance in param_importance.items():
+        print(f"{param}: {importance:.3f}")
+
+    # Plot the importance (optional, comment out if not needed)
+    print("\nGenerating importance plot...")
+    fig = optuna.visualization.plot_param_importances(study)
+    fig.show()

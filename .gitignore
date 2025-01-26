@@ -3,7 +3,5 @@
 /.idea/
 /wandb/
 /__pycache__/
-
 *.pth
-
 wandb_key.txt

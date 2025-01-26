@@ -7,7 +7,7 @@ class Metric(abc.ABC):
     """ Abstract base class for a distance metric. """
 
     def preprocess(self, D):
-        """ Optional method for preprocessing data (default is no-op). """
+        """ Optional method for preprocessing data. """
         pass
 
     @abc.abstractmethod
@@ -21,7 +21,8 @@ class Metric(abc.ABC):
 
     def calculate_batch(self, fun, a, b, batch_size):
         """
-        Calculates the batched distance between two tensors 'a' and 'b' and applies a function to the computed distances.
+        Calculates the batched distance between two tensors 'a' and 'b'
+        and applies a function to the computed distances.
 
         Parameters:
          - fun (function): A function to apply to the computed distances.
@@ -172,9 +173,6 @@ class MahalanobisMetric(Metric):
         diff = b - a  # [n_samples_b, a_n_classes, n_samples_a, n_features]
         return torch.einsum('abcd,bed,abce->abc', diff, self.inv_cov_matrix[-a.size(1):], diff)
 
-    def reset(self):
-        self.is_first_preprocess = True
-
     def get_config(self):
-        """Get the configuration of the metric for WandB logging."""
+        """ Get the configuration of the metric for WandB logging. """
         return self.config

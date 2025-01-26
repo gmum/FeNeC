@@ -105,6 +105,7 @@ class KMeans:
 
         # Return the final centroids
         return centroids
+
     def get_config(self):
         """ Returns the configuration of the KMeans object for W&B logging. """
         return self.config
