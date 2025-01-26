@@ -20,7 +20,7 @@ class MLPClassifier(Classifier):
             * 'kmeans': Retains centroid-based samples using KMeans.
          - metric_kmeans (Metric.Metric): Optional metric used for KMeans clustering when selection_method is 'kmeans'.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs, config_arguments=locals())
         self.model = model
         self.n_store = n_store
         self.selection_method = selection_method

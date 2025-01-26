@@ -1,7 +1,5 @@
 import torch
 
-from KMeans import KMeans
-import Metrics
 from Classifier import Classifier
 
 
@@ -13,16 +11,8 @@ class KNNClassifier(Classifier):
         Parameters:
          - n_neighbors (int): Number of nearest neighbors to consider for classification.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs, config_arguments=locals())
         self.n_neighbors = n_neighbors
-
-        
-        self.config = {key: value for key, value in {**locals(), **kwargs}.items() if
-                       isinstance(value, (str, int, float, bool))}
-        if isinstance(self.kmeans, KMeans):
-            self.config.update(self.kmeans.get_config())
-        if isinstance(self.metric, Metrics.MahalanobisMetric):
-            self.config.update(self.metric.get_config())
 
     def model_predict(self, distances):
         # Get the distances and indices of the k closest training samples

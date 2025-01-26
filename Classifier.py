@@ -11,7 +11,7 @@ from KMeans import KMeans
 
 class Classifier(abc.ABC):
     def __init__(self, metric, is_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=8,
-                 *args, **kwargs):
+                 config_arguments=None, *args, **kwargs):
         """
         Initializes the Classifier.
 
@@ -22,6 +22,7 @@ class Classifier(abc.ABC):
          - kmeans (KMeans): Optional KMeans object for clustering, if used.
          - device (str): Device on which computations are performed ('cpu' or 'cuda').
          - batch_size (int): Batch size for splitting test data. Used in prediction.
+         Additional configuration parameters from the inherited class for wandb config (from the inherited class).
         """
         self.metric = metric
         self.is_normalization = is_normalization
@@ -32,6 +33,12 @@ class Classifier(abc.ABC):
         self.is_first_fit = True
 
         # Configure wandb with local and keyword arguments of valid types.
+        self.config = {key: value for key, value in {**locals(), **kwargs, **config_arguments}.items() if
+                       isinstance(value, (str, int, float, bool))}
+        if isinstance(self.kmeans, KMeans):
+            self.config.update(self.kmeans.get_config())
+        if isinstance(self.metric, Metrics.MahalanobisMetric):
+            self.config.update(self.metric.get_config())
 
     def apply_tukey(self, T):
         """ Applies Tukey’s Ladder of Powers transformation to the tensor T. """

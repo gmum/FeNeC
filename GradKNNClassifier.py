@@ -3,8 +3,6 @@ import torch.nn.functional as F
 import wandb
 from torch.utils.data import DataLoader, TensorDataset, ConcatDataset, random_split
 
-from KMeans import KMeans
-import Metrics
 from Classifier import Classifier
 
 
@@ -43,7 +41,7 @@ class GradKNNClassifier(Classifier):
             * 2: Send to wandb only the most important metrics.
             * 3: Save detailed logs and metrics to Weights and Biases (WandB) every epoch.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs, config_arguments=locals())
         self.optimizer = optimizer
         self.n_points = n_points
         self.mode = mode
@@ -65,13 +63,6 @@ class GradKNNClassifier(Classifier):
 
         self.task_boundaries = torch.tensor([0])  # Tracks class boundaries for normalization
         self.already_trained = False  # Tracks if the model is trained, used with train_only_on_first_task=True.
-
-        self.config = {key: value for key, value in {**locals(), **kwargs}.items() if
-                       isinstance(value, (str, int, float, bool))}
-        if isinstance(self.kmeans, KMeans):
-            self.config.update(self.kmeans.get_config())
-        if isinstance(self.metric, Metrics.MahalanobisMetric):
-            self.config.update(self.metric.get_config())
 
         # Initialize parameters
         self.parameters = torch.nn.ParameterDict()
