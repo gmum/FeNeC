@@ -82,6 +82,8 @@ def objective(trial):
     elif(dataset_name == "dataset3"):
         tukey_lambda = trial.suggest_float('lambda', 0.2, 1., log=False)
 
+    reg_type = trial.suggest_categorical("reg_type", [0, 1, 2])
+    reg_lambda = trial.suggest_float('reg_lambda', 0.0001, 1, log=True)
 
     lr = trial.suggest_float('lr', 0.0005, 0.1, log=True)
     # KNN metric:sq
@@ -104,12 +106,12 @@ def objective(trial):
                         num_epochs=350,
                         lr=lr,
                         early_stop_patience=10,
-                        reg_type=0,
-                        reg_lambda=0,
+                        reg_type=reg_type,
+                        reg_lambda=reg_lambda,
                         normalization_type=None,
                         tanh_x=None,
                         centroids_new_old_ratio=None,#Tu w jednym dajemy na None w drugim dajemy na ten parametr
-                        train_only_on_first_task=True,
+                        train_only_on_first_task=False,
                         dataloader_batch_size=64,
                         study_name=study_name,
                         verbose=2)
