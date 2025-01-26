@@ -4,13 +4,14 @@ import wandb
 from torch.utils.data import DataLoader, TensorDataset, ConcatDataset, random_split
 
 from Classifier import Classifier
-import Metrics
 
 
 class GradKNNClassifier(Classifier):
-    def __init__(self, optimizer="Adam", n_points=10, mode=0, num_epochs=100, lr=1e-3, early_stop_patience=10,
-                 reg_type=None, reg_lambda=None, normalization_type=None, tanh_x=None, centroids_new_old_ratio=None, train_only_on_first_task=False,
-                 dataloader_batch_size=64, study_name="GradKNNClassifier", verbose=True, *args, **kwargs):
+    def __init__(self, optimizer="SGD", n_points=10, mode=0, num_epochs=200, lr=1e-3, early_stop_patience=10,
+                 reg_type=None, reg_lambda=None, normalization_type=None, tanh_x=None, centroids_new_old_ratio=None,
+                 train_only_on_first_task=True, dataloader_batch_size=64, verbose=1,
+                 is_alpha=True, activation="LeakyReLu", leaky=0.01, *args, **kwargs):
+        # TODO: is_alpha, activation, leaky - temporary
         """
         Initializes the GradKNNClassifier.
 
@@ -34,7 +35,6 @@ class GradKNNClassifier(Classifier):
                                             (If 'None', then don't apply centroids).
          - train_only_on_first_task (bool): If True, train only on the first task.
          - dataloader_batch_size (int): Batch size for the DataLoader.
-         - study_name (string): Name of the wandb study.
          - verbose (int): Controls the level of detail in logging and data saving:
             * 0: Print only essential information during execution.
             * 1: Print detailed logs and metrics to the console.
@@ -55,19 +55,14 @@ class GradKNNClassifier(Classifier):
         self.centroids_new_old_ratio = centroids_new_old_ratio
         self.train_only_on_first_task = train_only_on_first_task
         self.dataloader_batch_size = dataloader_batch_size
-        self.study_name = study_name
         self.verbose = verbose
 
-        self.config = {key: value for key, value in {**locals(), **kwargs}.items() if isinstance(value, (str, int, float, bool))}
-
-        self.config.update(self.kmeans.get_config())
-        if(isinstance(self.metric, Metrics.MahalanobisMetric)):
-            self.config.update(self.metric.get_config())
-
+        self.is_alpha = is_alpha
+        self.activation = activation
+        self.leaky = leaky
 
         self.task_boundaries = torch.tensor([0])  # Tracks class boundaries for normalization
-
-        self.already_trained = False
+        self.already_trained = False  # Tracks if the model is trained, used with train_only_on_first_task=True.
 
         # Initialize parameters
         self.parameters = torch.nn.ParameterDict()
@@ -82,15 +77,6 @@ class GradKNNClassifier(Classifier):
                 self.parameters.update({parameter_name: torch.nn.Parameter(torch.empty(0, device=self.device))})
         self.original_parameters = None
 
-    def get_config(self):
-        """
-        Returns a dictionary combining locals() and kwargs.
-        Returns:
-        - config (dict): Dictionary containing local variables and keyword arguments.
-        """
-
-        return self.config
-
     def model_predict(self, distances):
         """
         Method for predicting class labels based on distances to training samples.
@@ -101,10 +87,9 @@ class GradKNNClassifier(Classifier):
         Returns:
          - Tensor: Predicted class labels.
         """
-
         with torch.no_grad():
             return torch.argmax(self.gradknn_predict(self.n_nearest_points(distances), is_training=False), -1)
-        
+
     def evaluate_validation(self, valid_dataloader):
         """
         Evaluate the validation dataset.
@@ -147,9 +132,13 @@ class GradKNNClassifier(Classifier):
         if self.mode == 0:
             # Shared parameters for all classes
             data_transformed = parameters['a'] + parameters['b'] * torch.log(data + 1e-16)
-            data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
-            data_sum = data_activated.sum(dim=-1)
-            logits = parameters['alpha'] * data_sum
+            if self.activation == "LeakyReLu":
+                data_activated = F.leaky_relu(data_transformed, negative_slope=self.leaky)
+            elif self.activation == "Sigmoid":
+                data_activated = F.sigmoid(data_transformed)
+            logits = data_activated.sum(dim=-1)
+            if self.is_alpha:
+                logits = F.softplus(parameters['alpha']) * logits
             return logits
         else:
             # Separate parameters for each class
@@ -159,7 +148,7 @@ class GradKNNClassifier(Classifier):
                                     torch.tanh(parameters['b'])[None, :, None] * self.tanh_x * torch.log(data + 1e-16))
                 data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
                 data_sum = data_activated.sum(dim=-1)
-                logits = (torch.tanh(parameters['alpha'][None, :] * self.tanh_x) * data_sum
+                logits = (F.softplus(torch.tanh(parameters['alpha'][None, :]) * self.tanh_x) * data_sum
                           + torch.tanh(parameters['r'][None, :]) * self.tanh_x)
             else:
                 # Use raw parameters for transformation
@@ -167,7 +156,7 @@ class GradKNNClassifier(Classifier):
                                     parameters['b'][None, :, None] * torch.log(data + 1e-16))
                 data_activated = F.leaky_relu(data_transformed, negative_slope=0.01)
                 data_sum = data_activated.sum(dim=-1)
-                logits = parameters['alpha'][None, :] * data_sum + parameters['r'][None, :]
+                logits = F.softplus(parameters['alpha'][None, :]) * data_sum + parameters['r'][None, :]
 
             # Standardize logits during training if specified
             if is_training and self.normalization_type == 1:
@@ -196,18 +185,17 @@ class GradKNNClassifier(Classifier):
         self.update_parameters()
 
         # Train the model on the task data.
-        self.train()
+        self.train(**kwargs)
 
         # Save the current task parameters for regularization in future tasks.
         self.save_original_parameters()
 
-    def train(self):
+    def train(self, study_name=None, **kwargs):
         """ Main training loop for the classifier. """
-        
-        if(self.already_trained):
+        if self.train_only_on_first_task and self.already_trained:
             return
         self.already_trained = True
-        
+
         # Prepare the DataLoaders for training and validation
         train_dataloader, train_dataloader_sec, valid_dataloader = self.prepare_dataloader()
 
@@ -243,12 +231,6 @@ class GradKNNClassifier(Classifier):
                 predictions = self.gradknn_predict(data)
                 loss = F.cross_entropy(predictions, target)  # Cross-entropy loss
                 reg_loss = self.regularization()  # Regularization loss
-                #Eksperyment na jednym zestawie hiperparametrów, najlepsze z grid searcha mieć z niego accuracy, takie same wykresy, co batcha, accuracy co task, najlepsze parametry z grid searcha // MODE 1
-                #Ten zestaw który pokazywałem z reg_lambdą = 1, accuracy co task i wykresy
-                #Ten sam zestaw ale reg_lambda = 100, accuracy co task, wykrey co batch itp.
-
-
-
                 loss += reg_loss  # Add regularization to the total loss
 
                 # Backpropagation and optimization
@@ -262,7 +244,6 @@ class GradKNNClassifier(Classifier):
                 correct += (predicted_classes == target).sum().item()
                 total += target.size(0)
 
-
             # Calculate and display epoch metrics (accuracy and loss)
             avg_valid_loss, valid_accuracy = self.evaluate_validation(valid_dataloader)
 
@@ -271,18 +252,17 @@ class GradKNNClassifier(Classifier):
                 if epoch % 10 == 0:
                     print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
                           f"Loss = {avg_valid_loss:.4f},")
-                    
+
             if self.verbose == 3:
                 wandb.log({"cross_entropy_loss": epoch_loss / len(train_dataloader), "reg_loss": reg_loss,
                            "total_loss": loss + reg_loss})
                 wandb.log({"valid_loss": avg_valid_loss, "valid_accuracy": valid_accuracy})
                 self.save_task_data(self.D_centroids.size(0), epoch, self.parameters)
 
-
             # Early stopping logic: track and compare validation loss.
             if avg_valid_loss < best_validation_loss:
                 # Save the best data for early stopping
-                torch.save(self.parameters.state_dict(), f"{self.study_name}.pth")
+                torch.save(self.parameters.state_dict(), f"{study_name}.pth")
                 best_validation_loss = avg_valid_loss
                 epochs_no_improve = 0
             else:
@@ -294,7 +274,7 @@ class GradKNNClassifier(Classifier):
                 print(f"Early Stopping at Epoch [{epoch + 1}/{self.num_epochs}]: Accuracy = {valid_accuracy:.2f}%, "
                       f"Loss = {avg_valid_loss:.4f},")
                 # Load the best data
-                self.parameters.load_state_dict(torch.load(f"{self.study_name}.pth", weights_only=True))
+                self.parameters.load_state_dict(torch.load(f"{study_name}.pth", weights_only=True))
                 break
         if self.verbose == 2:
             self.save_task_data(self.D_centroids.size(0), 0, self.parameters)
@@ -330,7 +310,7 @@ class GradKNNClassifier(Classifier):
         # Create a separate dataloader with old centroids
         if self.centroids_new_old_ratio is not None:
             # Use all centroids, including the current ones, or only the old ones
-            D_range = self.D_centroids.size(0)
+            D_range = self.D_centroids.size(0) - self.D.size(0)
 
             # Create a dataloader with centroids if required
             if D_range != 0:
