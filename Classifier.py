@@ -32,12 +32,6 @@ class Classifier(abc.ABC):
         self.is_first_fit = True
 
         # Configure wandb with local and keyword arguments of valid types.
-        self.config = {key: value for key, value in {**locals(), **kwargs}.items() if
-                       isinstance(value, (str, int, float, bool))}
-        if isinstance(self.kmeans, KMeans):
-            self.config.update(self.kmeans.get_config())
-        if isinstance(self.metric, Metrics.MahalanobisMetric):
-            self.config.update(self.metric.get_config())
 
     def apply_tukey(self, T):
         """ Applies Tukey’s Ladder of Powers transformation to the tensor T. """
