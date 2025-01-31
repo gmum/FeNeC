@@ -20,11 +20,12 @@ class KMeans:
         self.tol = tol
         self.metric = metric
         self.seed = seed
+        self.config = {'n_clusters': n_clusters, 'max_iter': max_iter, 'tol': tol, 'metric': metric, 'seed': seed}
 
     def metric_preprocess(self, D):
         """ Preprocess metric: currently only used for Mahalanobis Metric """
         # We save the data for later (fit_predict method) and will preprocess the metric there
-        self.D_preprocess = D
+        self.D_preprocess = D.detach().clone()
 
     def kmeans_plusplus(self, D):
         """
@@ -69,28 +70,22 @@ class KMeans:
 
         if init == 'k-means++':
             centroids = self.kmeans_plusplus(D)
-        elif init == 'random':
+        else:  # init == 'random'
             random_indices = torch.randperm(D.size(1))[:self.n_clusters]
             centroids = D[:, random_indices]
 
         # Iterate over each class to calculate the centroids
         for d_class in range(D.size(0)):
-            # In the case of Mahalanobis Distance for KMeans:
-            # For each class, we reset the metric and calculate a new covariance matrix using only this class.
-            # This covariance matrix will be used to calculate the distances
-            # between the centroids and the data belonging to this class.
+            # Preprocessing the metric on the current class (used in the case of Mahalanobis Distance for KMeans)
             if isinstance(self.metric, Metrics.MahalanobisMetric):
-                self.metric.is_first_preprocess = True
                 self.metric.preprocess(self.D_preprocess[d_class:d_class + 1])
 
             # Perform iterations up to max_iter (though it is usually less because of self.tol)
             for i in range(self.max_iter):
-                # Calculate distances between points and centroids
-                distances = self.metric.calculate(D[d_class].unsqueeze(0), centroids[d_class].unsqueeze(1))
-                distances = distances.reshape(self.n_clusters, D.size(1))  # Adjust dimension if necessary
+                # Calculate distances between points and centroids and assign points to the nearest centroid (cluster)
+                min_dist = lambda dists: (torch.argmin(dists.reshape(-1, self.n_clusters), dim=1))
+                cluster_labels = self.metric.calculate_batch(min_dist, centroids[d_class].unsqueeze(0), D[d_class], -1)
 
-                # Assign points to the nearest centroid (cluster)
-                cluster_labels = torch.argmin(distances, dim=0)
                 # Calculate new centroids by averaging points in each cluster
                 new_centroids = torch.stack([D[d_class, (cluster_labels == j)].mean(dim=0)
                                              for j in range(self.n_clusters)])
@@ -110,3 +105,7 @@ class KMeans:
 
         # Return the final centroids
         return centroids
+
+    def get_config(self):
+        """ Returns the configuration of the KMeans object for W&B logging. """
+        return self.config

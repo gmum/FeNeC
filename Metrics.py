@@ -7,7 +7,7 @@ class Metric(abc.ABC):
     """ Abstract base class for a distance metric. """
 
     def preprocess(self, D):
-        """ Optional method for preprocessing data (default is no-op). """
+        """ Optional method for preprocessing data. """
         pass
 
     @abc.abstractmethod
@@ -19,36 +19,34 @@ class Metric(abc.ABC):
         """ Method for resetting the state of the metric after preprocessing it. """
         pass
 
-    def calculate_batch(self, fun, a, b, batch_size_a, batch_size_b):
+    def calculate_batch(self, fun, a, b, batch_size):
         """
-        Calculates the batched distance between two tensors 'a' and 'b' and applies a function to the computed distances.
+        Calculates the batched distance between two tensors 'a' and 'b'
+        and applies a function to the computed distances.
 
         Parameters:
          - fun (function): A function to apply to the computed distances.
          - a (torch.Tensor): The first tensor of shape [n_classes, samples_per_class, n_features].
          - b (torch.Tensor): The second tensor [n_samples_b, n_features].
-         - batch_size_a (int): The batch size for tensor 'a'. If set to -1, it uses the full size of 'a'.
-         - batch_size_b (int): The batch size for tensor 'b'. If set to -1, it uses the full size of 'b'.
+         - batch_size (int): The batch size for tensor 'b'. If set to -1, it uses the full size of 'b'.
 
         Returns:
          - torch.Tensor: The results of the function 'fun' applied to the distances between 'a' and 'b'.
         """
-        # Set batch size for 'a' to full size if specified as -1
-        if batch_size_a == -1:
-            batch_size_a = a.size(1)
+        # Add a dimension so that it is of shape [1, n_classes, samples_per_class, n_features].
+        if a.ndim == 3:
+            a = a.unsqueeze(0)
+
         # Set batch size for 'b' to full size if specified as -1
-        if batch_size_b == -1:
-            batch_size_b = b.size(0)
+        if batch_size == -1:
+            batch_size = b.size(0)
 
         res = []
 
-        # Split tensor 'a' into batches along the second-to-last dimension
-        split_A = a[None, :, :, :].split(batch_size_a, dim=-2)
-
-        for batch_B in b[:, None, None, :].split(batch_size_b, dim=0):
+        for batch_b in b[:, None, None, :].split(batch_size, dim=0):
             # Compute distances between each batch of 'a' and 'batch_B', then reshape
-            distances = torch.cat([self.calculate(batch_A, batch_B) for batch_A in split_A], dim=-1).reshape(
-                batch_B.size(0), a.size(0), a.size(1))  # Shape: [batch_size_b, n_classes, samples_per_class]
+            # Shape of distances: [batch_size, n_classes, samples_per_class]
+            distances = self.calculate(a, batch_b).reshape(batch_b.size(0), a.size(1), a.size(2))
 
             # Apply the function to the calculated distances and append to results list
             res.append(fun(distances))
@@ -93,6 +91,7 @@ class MahalanobisMetric(Metric):
         self.gamma_2 = gamma_2
         self.normalization = normalization
         self.is_first_preprocess = True
+        self.config = {'shrinkage': shrinkage, 'gamma_1': gamma_1, 'gamma_2': gamma_2, 'normalization': normalization}
 
     def preprocess(self, D):
         """
@@ -158,21 +157,22 @@ class MahalanobisMetric(Metric):
 
     def calculate(self, a, b):
         """
-        Calculate the squared Mahalanobis distance between tensors a and b.
+        Calculate the squared Mahalanobis distance between tensors a and b. The number of classes in tensor 'a' may
+        differ from the number of classes in 'self.inv_cov_matrix'. In that case, the Mahalanobis distance shall be
+        calculated using only the last 'a_n_classes'.
 
         Parameters:
-         - a (torch.Tensor): First tensor of shape [n_classes, n_samples_a, n_features].
-         - b (torch.Tensor): Second tensor of shape [n_samples_b, n_features].
+         - a (torch.Tensor): First tensor of shape [1, a_n_classes, n_samples_a, n_features].
+         - b (torch.Tensor): Second tensor of shape [n_samples_b, 1, 1, n_features].
 
         Returns:
-         - torch.Tensor: Mahalanobis distance between a and b. Shape [n_samples_b, n_classes, n_samples_a].
+         - torch.Tensor: Mahalanobis distance between a and b. Shape [n_samples_b, a_n_classes, n_samples_a].
         """
-        a = a.reshape(1, self.n_classes, -1, self.n_features)
-        b = b.reshape(-1, 1, 1, self.n_features)
 
         # Compute the Mahalanobis distance
-        diff = b - a  # [n_samples_b, n_classes, n_samples_a, n_features]
-        return torch.einsum('abcd,bed,abce->abc', diff, self.inv_cov_matrix, diff)
+        diff = b - a  # [n_samples_b, a_n_classes, n_samples_a, n_features]
+        return torch.einsum('abcd,bed,abce->abc', diff, self.inv_cov_matrix[-a.size(1):], diff)
 
-    def reset(self):
-        self.is_first_preprocess = True
+    def get_config(self):
+        """ Get the configuration of the metric for WandB logging. """
+        return self.config

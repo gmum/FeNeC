@@ -11,7 +11,7 @@ class KNNClassifier(Classifier):
         Parameters:
          - n_neighbors (int): Number of nearest neighbors to consider for classification.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs, config_arguments=locals())
         self.n_neighbors = n_neighbors
 
     def model_predict(self, distances):

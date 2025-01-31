@@ -42,8 +42,8 @@ class TestMetrics(unittest.TestCase):
 
     def test_mahalanobis_distance(self):
         D = torch.tensor([[[1, 2], [2, 3], [3, 5]], [[5, 7], [4, -3], [10, 0]]], dtype=torch.float32)
-        a = torch.mean(D, 1).unsqueeze(1)
-        b = torch.tensor([[2, 4]])
+        a = torch.mean(D, 1).unsqueeze(1).unsqueeze(0)
+        b = torch.tensor([[2, 4]]).unsqueeze(1).unsqueeze(1)
 
         metric = Metrics.MahalanobisMetric(normalization=False)
         metric.preprocess(D)
@@ -55,8 +55,8 @@ class TestMetrics(unittest.TestCase):
 
     def test_mahalanobis_distance_2(self):
         D = torch.tensor([[[1, 2], [2, 3], [3, 5]], [[5, 7], [4, -3], [10, 0]]], dtype=torch.float32)
-        a = torch.mean(D, 1).unsqueeze(1)
-        b = torch.tensor([[2, 4], [-3, 0], [1, 2]])
+        a = torch.mean(D, 1).unsqueeze(1).unsqueeze(0)
+        b = torch.tensor([[2, 4], [-3, 0], [1, 2]]).unsqueeze(1).unsqueeze(1)
 
         metric = Metrics.MahalanobisMetric(normalization=False)
         metric.preprocess(D)
