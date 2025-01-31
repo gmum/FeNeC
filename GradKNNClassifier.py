@@ -7,11 +7,9 @@ from Classifier import Classifier
 
 
 class GradKNNClassifier(Classifier):
-    def __init__(self, optimizer="SGD", n_points=10, mode=0, num_epochs=200, lr=1e-3, early_stop_patience=10,
+    def __init__(self, optimizer="SGD", n_points=10, mode=0, num_epochs=200, lr=0.01, early_stop_patience=10,
                  reg_type=None, reg_lambda=None, normalization_type=None, tanh_x=None, centroids_new_old_ratio=None,
-                 train_only_on_first_task=True, dataloader_batch_size=64, verbose=1,
-                 is_alpha=True, activation="LeakyReLu", leaky=0.01, *args, **kwargs):
-        # TODO: is_alpha, activation, leaky - temporary
+                 train_only_on_first_task=True, dataloader_batch_size=64, verbose=1, *args, **kwargs):
         """
         Initializes the GradKNNClassifier.
 
@@ -57,20 +55,14 @@ class GradKNNClassifier(Classifier):
         self.dataloader_batch_size = dataloader_batch_size
         self.verbose = verbose
 
-        self.is_alpha = is_alpha
-        self.activation = activation
-        self.leaky = leaky
-
         self.task_boundaries = torch.tensor([0])  # Tracks class boundaries for normalization
         self.already_trained = False  # Tracks if the model is trained, used with train_only_on_first_task=True.
 
         # Initialize parameters
         self.parameters = torch.nn.ParameterDict()
         if self.mode == 0:
-            for parameter_name in ['alpha', 'a', 'b']:
+            for parameter_name in ['a', 'b']:
                 new_param = torch.randn(1, device=self.device)
-                if parameter_name == 'alpha':
-                    new_param = torch.abs(new_param)
                 self.parameters.update({parameter_name: torch.nn.Parameter(new_param)})
         else:
             for parameter_name in ['alpha', 'a', 'b', 'r']:
@@ -131,14 +123,12 @@ class GradKNNClassifier(Classifier):
 
         if self.mode == 0:
             # Shared parameters for all classes
-            data_transformed = parameters['a'] + parameters['b'] * torch.log(data + 1e-16)
-            if self.activation == "LeakyReLu":
-                data_activated = F.leaky_relu(data_transformed, negative_slope=self.leaky)
-            elif self.activation == "Sigmoid":
-                data_activated = F.sigmoid(data_transformed)
+            if self.tanh_x is not None:
+                data_transformed = torch.tanh(parameters['a']) + torch.tanh(parameters['b']) * torch.log(data + 1e-16)
+            else:
+                data_transformed = parameters['a'] + parameters['b'] * torch.log(data + 1e-16)
+            data_activated = F.leaky_relu(data_transformed)
             logits = data_activated.sum(dim=-1)
-            if self.is_alpha:
-                logits = F.softplus(parameters['alpha']) * logits
             return logits
         else:
             # Separate parameters for each class
@@ -198,17 +188,21 @@ class GradKNNClassifier(Classifier):
 
         # Prepare the DataLoaders for training and validation
         train_dataloader, train_dataloader_sec, valid_dataloader = self.prepare_dataloader()
-
         if train_dataloader_sec is not None:
             iter_dataloader_sec = iter(train_dataloader_sec)  # Iterator for additional centroids data
 
         # Initialize variables for early stopping and tracking metrics
         best_validation_loss = float('inf')
-        epochs_no_improve = 0  # Count of consecutive epochs without improvement
+        epochs_no_improve = 0  # Number of consecutive epochs without improvement
+
+        # Initialize the optimizer and learning rate scheduler
         if self.optimizer == "Adam":
             optimizer = torch.optim.Adam(self.parameters.parameters(), lr=self.lr)
         elif self.optimizer == "SGD":
             optimizer = torch.optim.SGD(self.parameters.parameters(), lr=self.lr)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5)
+
+        # Main training loop
         for epoch in range(self.num_epochs):
             epoch_loss = 0.0  # Cumulative loss for the epoch
             correct = 0  # Number of correct predictions
@@ -246,10 +240,11 @@ class GradKNNClassifier(Classifier):
 
             # Calculate and display epoch metrics (accuracy and loss)
             avg_valid_loss, valid_accuracy = self.evaluate_validation(valid_dataloader)
+            scheduler.step(avg_valid_loss)  # Update the scheduler
 
             if self.verbose >= 1:
                 # Save parameters for later study.
-                if epoch % 10 == 0:
+                if epoch % 5 == 0:
                     print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
                           f"Loss = {avg_valid_loss:.4f},")
 
@@ -450,12 +445,10 @@ class GradKNNClassifier(Classifier):
         - loss (float): Loss value for the epoch.
         - parameters (dict): Dictionary containing model parameters (`alpha`, `a`, `b`, `r`).
         """
-
         if self.mode == 0:
             data = {
                 "task": task,
                 "epoch": epoch,
-                "alpha": parameters["alpha"].item(),
                 "a": parameters["a"].item(),
                 "b": parameters["b"].item(),
             }
@@ -463,7 +456,6 @@ class GradKNNClassifier(Classifier):
 
         elif self.mode == 1:
             # Convert parameters to lists and pad to class_num with zeros
-
             alpha_list = parameters["alpha"].detach().cpu().numpy().tolist()
             a_list = parameters["a"].detach().cpu().numpy().tolist()
             b_list = parameters["b"].detach().cpu().numpy().tolist()

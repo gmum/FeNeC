@@ -22,7 +22,7 @@ class Classifier(abc.ABC):
          - kmeans (KMeans): Optional KMeans object for clustering, if used.
          - device (str): Device on which computations are performed ('cpu' or 'cuda').
          - batch_size (int): Batch size for splitting test data. Used in prediction.
-         Additional configuration parameters from the inherited class for wandb config (from the inherited class).
+         - config_arguments (dict): Additional configuration parameters from the inherited class for wandb config.
         """
         self.metric = metric
         self.is_normalization = is_normalization
