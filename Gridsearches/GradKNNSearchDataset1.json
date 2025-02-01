@@ -25,10 +25,7 @@
         },
 
         "is_normalization": true,
-        "tukey_lambda": {
-            "method": "suggest_float",
-            "args": [0.3, 0.6]
-        },
+        "tukey_lambda": 1,
         "batch_size": 16,
         "optimizer": "SGD",
         "n_points": {
