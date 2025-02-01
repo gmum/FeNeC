@@ -16,8 +16,8 @@ import wandb
 
 # Path to the Optuna database for storing study results
 
-OPTUNA_DB_PATH = 'sqlite:///:memory:' #for local testing
-#OPTUNA_DB_PATH = 'sqlite:///./results/optuna_study.db'
+#OPTUNA_DB_PATH = 'sqlite:///:memory:' #for local testing
+OPTUNA_DB_PATH = 'sqlite:///./results/optuna_study.db'
 
 
 def get_device(verbose=True):
