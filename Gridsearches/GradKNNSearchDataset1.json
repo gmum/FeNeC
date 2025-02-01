@@ -1,22 +1,22 @@
 {
-    "dataset_name": "dataset2",
-    "n_tasks": 6,
+    "dataset_name": "dataset1",
+    "n_tasks": 10,
     "verbose": 2,
-    "study_name": "test_study_12",
+    "study_name": "Dataset1GradKNNFinalSearch",
     "model_type": "GradKNN",
     "sampler": "TPE",
-    "last_accuracy_trials": 100,
     "average_accuracy_trials": 500,
+    "last_accuracy_trials": 100,
     "hyperparameters": {
         "gamma_1": {
             "method": "suggest_float",
-            "args": [0.001, 2.0]
+            "args": [0.5, 2.0]
         },
         "gamma_2": {
             "method": "suggest_float",
-            "args": [0.001, 2.0]
+            "args": [0.5, 2.0]
         },
-        "shrinkage": 2,
+        "shrinkage": 1,
         "metric_normalization": true,
         
         "n_clusters": {
