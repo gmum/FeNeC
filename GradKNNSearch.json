@@ -1,0 +1,57 @@
+{
+    "dataset_name": "dataset2",
+    "n_tasks": 6,
+    "verbose": 2,
+    "study_name": "test_study_12",
+    "model_type": "GradKNN",
+    "sampler": "TPE",
+    "last_accuracy_trials": 100,
+    "average_accuracy_trials": 500,
+    "hyperparameters": {
+        "gamma_1": {
+            "method": "suggest_float",
+            "args": [0.001, 2.0]
+        },
+        "gamma_2": {
+            "method": "suggest_float",
+            "args": [0.001, 2.0]
+        },
+        "shrinkage": 2,
+        "metric_normalization": true,
+        
+        "n_clusters": {
+            "method": "suggest_int",
+            "args": [2, 75]
+        },
+
+        "is_normalization": true,
+        "tukey_lambda": {
+            "method": "suggest_float",
+            "args": [0.3, 0.6]
+        },
+        "batch_size": 16,
+        "optimizer": "SGD",
+        "n_points": {
+            "method": "suggest_int",
+            "args": [1, 40]
+        },
+        "mode": 0,
+        "num_epochs": 200,
+        "lr": {
+            "method": "suggest_float",
+            "args": [0.0001, 0.3],
+            "kwargs": {"log": true}
+        },
+        "early_stop_patience": 10,
+        "reg_type": 0,
+        "reg_lambda": 0,
+        "normalization_type": null,
+        "tanh_x": {
+            "method": "suggest_float_or_none",
+            "args": [0.1, 10.0]
+        },
+        "centroids_new_old_ratio": null,
+        "train_only_on_first_task": true,
+        "dataloader_batch_size": 64
+    }
+}
