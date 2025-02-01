@@ -43,7 +43,6 @@ def objective(trial, config, only_last=False):
     
     hyperparams = {param: suggest_param(trial, param, suggest) for param, suggest in config["hyperparameters"].items()}
 
-    print(hyperparams["shrinkage"], hyperparams["gamma_1"], hyperparams["gamma_2"], hyperparams["metric_normalization"])
     metric = Metrics.MahalanobisMetric(shrinkage=hyperparams["shrinkage"], gamma_1=hyperparams['gamma_1'], gamma_2=hyperparams['gamma_2'],
                                        normalization=hyperparams['metric_normalization'])
     knn_metric = Metrics.EuclideanMetric()

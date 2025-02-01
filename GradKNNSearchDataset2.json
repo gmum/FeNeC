@@ -1,12 +1,12 @@
 {
-    "dataset_name": "dataset3",
+    "dataset_name": "dataset2",
     "n_tasks": 6,
     "verbose": 2,
-    "study_name": "Dataset3GradKNNFinalSearch",
+    "study_name": "Dataset2GradKNNFinalSearch",
     "model_type": "GradKNN",
     "sampler": "TPE",
-    "average_accuracy_trials": 500,
-    "last_accuracy_trials": 100,
+    "last_accuracy_trials": 500,
+    "average_accuracy_trials": 100,
     "hyperparameters": {
         "gamma_1": {
             "method": "suggest_float",

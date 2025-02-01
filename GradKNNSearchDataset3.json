@@ -1,12 +1,12 @@
 {
-    "dataset_name": "dataset1",
-    "n_tasks": 10,
+    "dataset_name": "dataset3",
+    "n_tasks": 6,
     "verbose": 2,
-    "study_name": "Dataset1GradKNNFinalSearch",
+    "study_name": "Dataset3GradKNNFinalSearch",
     "model_type": "GradKNN",
     "sampler": "TPE",
-    "average_accuracy_trials": 500,
-    "last_accuracy_trials": 100,
+    "last_accuracy_trials": 500,
+    "average_accuracy_trials": 100,
     "hyperparameters": {
         "gamma_1": {
             "method": "suggest_float",
@@ -16,7 +16,7 @@
             "method": "suggest_float",
             "args": [0.5, 2.0]
         },
-        "shrinkage": 1,
+        "shrinkage": 2,
         "metric_normalization": true,
         
         "n_clusters": {
@@ -25,7 +25,10 @@
         },
 
         "is_normalization": true,
-        "tukey_lambda": 1,
+        "tukey_lambda": {
+            "method": "suggest_float",
+            "args": [0.3, 0.6]
+        },
         "batch_size": 16,
         "optimizer": "SGD",
         "n_points": {
