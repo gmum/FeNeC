@@ -52,7 +52,7 @@ def objective(trial, config, only_last=False):
         clf = KNNClassifier(
             n_neighbors=hyperparams["n_neighbors"],
             metric=metric,
-            tukey_lambda=hyperparams["lambda"],
+            tukey_lambda=hyperparams["tukey_lambda"],
             kmeans=kmeans,
             device=device
         )

@@ -1,0 +1,33 @@
+{
+    "dataset_name": "dataset1",
+    "n_tasks": 10,
+    "verbose": 2,
+    "study_name": "KNNKMeansDataset1",
+    "model_type": "KNN",
+    "sampler": "TPE",
+    "last_accuracy_trials": 2000,
+    "average_accuracy_trials": 200,
+    "hyperparameters": {
+        "gamma_1": {
+            "method": "suggest_float",
+            "args": [0.5, 20.0]
+        },
+        "gamma_2": {
+            "method": "suggest_float",
+            "args": [0.5, 20.0]
+        },
+        "shrinkage": 1,
+        "metric_normalization": true,
+        
+        "n_clusters": {
+            "method": "suggest_int",
+            "args": [2, 75]
+        },
+        "tukey_lambda": 1,
+        "batch_size": 16,
+        "n_neighbors": {
+            "method": "suggest_int",
+            "args": [1, 40]
+        }
+    }
+}
