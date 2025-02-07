@@ -16,7 +16,7 @@ import wandb
 
 # Path to the Optuna database for storing study results
 
-#OPTUNA_DB_PATH = 'sqlite:///:memory:' #for local testing
+# OPTUNA_DB_PATH = 'sqlite:///:memory:' # for local testing # TODO
 OPTUNA_DB_PATH = 'sqlite:///./results/optuna_study.db'
 
 
@@ -81,8 +81,13 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name=None, verbose=0
             y_test = torch.tensor(np.array(f["y_test"]), dtype=torch.float32, device=device)
 
             # Group training samples by class
-            D = torch.concat([X_train[y_train == y_class].unsqueeze(0) for y_class in y_train.unique()])
-            task_sizes.append(D.size(0))
+            D = [X_train[y_train == y_class] for y_class in y_train.unique()]
+
+            # Check whether all the classes have the same number of samples
+            equal_samples_num = [d.size(0) for d in D].count(D[0].size(0)) == len(D)
+            if equal_samples_num:  # If so, convert them into a tensor
+                D = torch.concat([d.unsqueeze(0) for d in D])
+            task_sizes.append(len(D))
 
             # Determine whether to train the classifier (if required) and later use it for prediction
             should_predict = (not only_last or task_number == n_tasks - 1)
@@ -91,7 +96,7 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name=None, verbose=0
                 start = time.time()  # Track the time for performance analysis.
 
             # Fit the classifier to the grouped data
-            clf.fit(D, task_num=task_number, train=should_predict, study_name=study_name)
+            clf.fit(D, task_num=task_number, train=should_predict, study_name=study_name, verbose=verbose)
 
             # If prediction is enabled, generate predictions and calculate accuracy on the test set
             if should_predict:

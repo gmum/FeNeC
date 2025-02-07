@@ -25,7 +25,7 @@ class KMeans:
     def metric_preprocess(self, D):
         """ Preprocess metric: currently only used for Mahalanobis Metric """
         # We save the data for later (fit_predict method) and will preprocess the metric there
-        self.D_preprocess = D.detach().clone()
+        self.D_preprocess = [d.detach().clone() for d in D]
 
     def kmeans_plusplus(self, D):
         """

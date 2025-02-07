@@ -33,11 +33,6 @@ class GradKNNClassifier(Classifier):
                                             (If 'None', then don't apply centroids).
          - train_only_on_first_task (bool): If True, train only on the first task.
          - dataloader_batch_size (int): Batch size for the DataLoader.
-         - verbose (int): Controls the level of detail in logging and data saving:
-            * 0: Print only essential information during execution.
-            * 1: Print detailed logs and metrics to the console.
-            * 2: Send to wandb only the most important metrics.
-            * 3: Save detailed logs and metrics to Weights and Biases (WandB) every epoch.
         """
         super().__init__(*args, **kwargs, config_arguments=locals())
         self.optimizer = optimizer
@@ -53,7 +48,6 @@ class GradKNNClassifier(Classifier):
         self.centroids_new_old_ratio = centroids_new_old_ratio
         self.train_only_on_first_task = train_only_on_first_task
         self.dataloader_batch_size = dataloader_batch_size
-        self.verbose = verbose
 
         self.task_boundaries = torch.tensor([0])  # Tracks class boundaries for normalization
         self.already_trained = False  # Tracks if the model is trained, used with train_only_on_first_task=True.
@@ -180,14 +174,24 @@ class GradKNNClassifier(Classifier):
         # Save the current task parameters for regularization in future tasks.
         self.save_original_parameters()
 
-    def train(self, study_name=None, **kwargs):
-        """ Main training loop for the classifier. """
+    def train(self, study_name=None, verbose=1, **kwargs):
+        """
+        Main training loop for the classifier.
+
+        Parameters:
+         - study_name (string): The name of the study where the model will be saved.
+         - verbose (int): Controls the level of detail in logging and data saving:
+            * 0: Print only essential information during execution.
+            * 1: Print detailed logs and metrics to the console.
+            * 2: Send to WandB only the most important metrics.
+            * 3: Save detailed logs and metrics to WandB every epoch.
+        """
         if self.train_only_on_first_task and self.already_trained:
             return
         self.already_trained = True
 
         # Prepare the DataLoaders for training and validation
-        train_dataloader, train_dataloader_sec, valid_dataloader = self.prepare_dataloader()
+        train_dataloader, train_dataloader_sec, valid_dataloader = self.prepare_dataloader(verbose=verbose)
         if train_dataloader_sec is not None:
             iter_dataloader_sec = iter(train_dataloader_sec)  # Iterator for additional centroids data
 
@@ -242,13 +246,13 @@ class GradKNNClassifier(Classifier):
             avg_valid_loss, valid_accuracy = self.evaluate_validation(valid_dataloader)
             scheduler.step(avg_valid_loss)  # Update the scheduler
 
-            if self.verbose >= 1:
+            if verbose >= 1:
                 # Save parameters for later study.
                 if epoch % 5 == 0:
                     print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
                           f"Loss = {avg_valid_loss:.4f},")
 
-            if self.verbose == 3:
+            if verbose == 3:
                 wandb.log({"cross_entropy_loss": epoch_loss / len(train_dataloader), "reg_loss": reg_loss,
                            "total_loss": loss + reg_loss})
                 wandb.log({"valid_loss": avg_valid_loss, "valid_accuracy": valid_accuracy})
@@ -271,10 +275,10 @@ class GradKNNClassifier(Classifier):
                 # Load the best data
                 self.parameters.load_state_dict(torch.load(f"{study_name}.pth", weights_only=True))
                 break
-        if self.verbose == 2:
+        if verbose == 2:
             self.save_task_data(self.D_centroids.size(0), 0, self.parameters)
 
-    def prepare_dataloader(self):
+    def prepare_dataloader(self, verbose=0):
         """
         Prepare DataLoaders for training and validation, including optional centroids.
 
@@ -282,6 +286,7 @@ class GradKNNClassifier(Classifier):
          - train_dataloader (DataLoader): DataLoader for training.
          - train_dataloader_c (DataLoader): DataLoader for centroids (if applicable, `None` otherwise).
          - valid_dataloader (DataLoader): DataLoader for validation.
+         - verbose (int): Verbosity level for logging.
         """
 
         # Calculate features for all points in the current task
@@ -295,8 +300,8 @@ class GradKNNClassifier(Classifier):
         # X shape: [points in the current task, n_classes or classes in the current task, self.n_points]
 
         # Construct corresponding labels.
-        y = torch.arange(self.D_centroids.size(0) - self.D.size(0), self.D_centroids.size(0))
-        y = y.repeat_interleave(self.D.size(1)).to(self.device)
+        y = torch.repeat_interleave(torch.arange(len(self.D)), torch.tensor([d.shape[0] for d in self.D]))
+        y = y.to(self.device)
 
         # Split the dataset into training and validation subsets (validation for early stopping)
         train_dataset, valid_dataset = self.train_test_split(TensorDataset(X, y), 0.9)
@@ -305,7 +310,7 @@ class GradKNNClassifier(Classifier):
         # Create a separate dataloader with old centroids
         if self.centroids_new_old_ratio is not None:
             # Use all centroids, including the current ones, or only the old ones
-            D_range = self.D_centroids.size(0) - self.D.size(0)
+            D_range = self.D_centroids.size(0) - len(self.D)
 
             # Create a dataloader with centroids if required
             if D_range != 0:
@@ -334,7 +339,7 @@ class GradKNNClassifier(Classifier):
             data_loader_batch_size = int(self.centroids_new_old_ratio * data_loader_batch_size)
         train_dataloader = DataLoader(train_dataset, batch_size=data_loader_batch_size, shuffle=True, drop_last=True)
 
-        if self.verbose:
+        if verbose > 0:
             print("Dataloader created")
 
         # Return the dataloader with the smallest one being the first
@@ -354,7 +359,7 @@ class GradKNNClassifier(Classifier):
         if self.mode == 1:  # Only applicable in mode 1 (per-class parameters)
             for parameter in self.parameters:
                 # Generate new parameters uniformly in the given range
-                new_param = ((init_range[1] - init_range[0]) * torch.rand(self.D.size(0), device=self.device)
+                new_param = ((init_range[1] - init_range[0]) * torch.rand(len(self.D), device=self.device)
                              + init_range[0])
                 if parameter == 'alpha':
                     # Ensure 'alpha' remains positive by taking the absolute value
@@ -433,7 +438,7 @@ class GradKNNClassifier(Classifier):
             for parameter in self.parameters:
                 # Append the newly added parameters for the current task to the original parameters
                 self.original_parameters[parameter] = torch.nn.Parameter(torch.cat(
-                    [self.original_parameters[parameter], self.parameters[parameter][-self.D.size(0):]], dim=0))
+                    [self.original_parameters[parameter], self.parameters[parameter][-len(self.D):]], dim=0))
 
     def save_task_data(self, task, epoch, parameters):
         """
