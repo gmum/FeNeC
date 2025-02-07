@@ -43,7 +43,7 @@
       ]
     },
     "mode": 0,
-    "num_epochs": 200,
+    "num_epochs": 1000,
     "lr": {
       "method": "suggest_float",
       "args": [
