@@ -6,8 +6,8 @@ from KMeans import KMeans
 
 
 class MLPClassifier(Classifier):
-    def __init__(self, model, n_store=50, selection_method='random', metric_kmeans=Metrics.EuclideanMetric(), *args,
-                 **kwargs):
+    def __init__(self, model, n_store=50, selection_method='random', metric_kmeans=Metrics.EuclideanMetric(),
+                 *args, **kwargs):
         """
         Initializes the MLPClassifier.
 

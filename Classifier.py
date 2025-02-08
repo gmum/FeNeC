@@ -10,14 +10,14 @@ from KMeans import KMeans
 
 
 class Classifier(abc.ABC):
-    def __init__(self, metric, is_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=8,
+    def __init__(self, metric, data_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=8,
                  config_arguments=None, *args, **kwargs):
         """
         Initializes the Classifier.
 
         Parameters:
          - metric (Metric): The distance metric to be used.
-         - is_normalization (bool): Indicates whether data normalization should be applied.
+         - data_normalization (bool): Indicates whether data normalization should be applied.
          - tukey_lambda (float): Lambda value for Tukey’s Ladder of Powers transformation.
          - kmeans (KMeans): Optional KMeans object for clustering, if used.
          - device (str): Device on which computations are performed ('cpu' or 'cuda').
@@ -25,7 +25,7 @@ class Classifier(abc.ABC):
          - config_arguments (dict): Additional configuration parameters from the inherited class for wandb config.
         """
         self.metric = metric
-        self.is_normalization = is_normalization
+        self.data_normalization = data_normalization
         self.tukey_lambda = tukey_lambda
         self.kmeans = kmeans
         self.device = device
@@ -88,10 +88,10 @@ class Classifier(abc.ABC):
                     D_centroids = torch.clip(D_centroids, min=0)
 
         D_centroids = self.apply_tukey(D_centroids)  # Apply Tukey transformation to centroids.
-        if self.is_normalization:
+        if self.data_normalization:
             # Normalize centroids if normalization is enabled.
-            D_centroids = self.data_normalization(D_centroids)
-            self.D = self.data_normalization(self.D)  # Normalize the data if normalization is enabled.
+            D_centroids = self.normalize_data(D_centroids)
+            self.D = self.normalize_data(self.D)  # Normalize the data if normalization is enabled.
 
         self.D_centroids = torch.concat((self.D_centroids, D_centroids))
         self.n_classes = len(self.D_centroids)
@@ -123,8 +123,8 @@ class Classifier(abc.ABC):
         """
         # Process the test data
         X = self.apply_tukey(X)
-        if self.is_normalization:
-            X = self.data_normalization(X)
+        if self.data_normalization:
+            X = self.normalize_data(X)
 
         return self.metric.calculate_batch(self.model_predict, self.D_centroids, X, self.batch_size)
 
@@ -149,7 +149,7 @@ class Classifier(abc.ABC):
                 return [torch.log(t) for t in T]
 
     @staticmethod
-    def data_normalization(T, epsilon=1e-8):
+    def normalize_data(T, epsilon=1e-8):
         """ Normalizes the data tensor T """
         if torch.is_tensor(T):
             if T.ndim == 3:
@@ -165,7 +165,7 @@ class Classifier(abc.ABC):
                 representation = T_permuted / (norm + epsilon)
                 return representation.T
         else:
-            return [Classifier.data_normalization(t) for t in T]
+            return [Classifier.normalize_data(t) for t in T]
 
     @staticmethod
     def getD(X, y):

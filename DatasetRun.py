@@ -66,7 +66,7 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name=None, verbose=0
                    config=clf.get_config(),
                    settings=wandb.Settings(init_timeout=300))
 
-    accuracy_sum = 0
+    accuracies = []
 
     # Loop over the tasks to train and test the classifier.
     for task_number in range(n_tasks):
@@ -102,7 +102,7 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name=None, verbose=0
             if should_predict:
                 pred = clf.predict(X_test)
                 accuracy = clf.accuracy_score(y_test, pred, verbose=verbose, task_sizes=task_sizes)
-                accuracy_sum += accuracy
+                accuracies.append(accuracy)
 
                 if verbose >= 1:
                     end = time.time()
@@ -114,9 +114,10 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name=None, verbose=0
     # Finish the W&B run if verbose is high enough
     if verbose >= 2:
         if not only_last:
-            wandb.log({f"average_accuracy": accuracy_sum / n_tasks})
+            wandb.log({f"average_accuracy": np.array(accuracies).mean()})
         wandb.finish()
-    return accuracy
+
+    return accuracies
 
 
 def grid_search(objective, study_name, n_trials, sampler=optuna.samplers.TPESampler(), restart=False, n_jobs=1,
