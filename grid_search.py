@@ -53,6 +53,7 @@ def objective(trial, config, only_last=False):
             n_neighbors=hyperparams["n_neighbors"],
             metric=metric,
             tukey_lambda=hyperparams["tukey_lambda"],
+            is_normalization=hyperparams["is_normalization"],
             kmeans=kmeans,
             device=device
         )

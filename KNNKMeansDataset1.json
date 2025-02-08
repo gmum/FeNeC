@@ -18,6 +18,7 @@
         },
         "shrinkage": 1,
         "metric_normalization": true,
+        "is_normalization": false,
         
         "n_clusters": {
             "method": "suggest_int",
