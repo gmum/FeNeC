@@ -1,3 +1,4 @@
+import os
 import time
 import unittest
 
@@ -8,6 +9,7 @@ import torch
 import torchvision
 from sklearn import datasets, neighbors, cluster
 
+import DatasetRun
 import Metrics
 from KMeans import KMeans
 from KNNClassifier import KNNClassifier
@@ -197,6 +199,76 @@ class TestKNNClassifier(unittest.TestCase):
         mean_similarity = np.array(similarities).mean()
         print("My KMeans similarity to sklearn's one:", mean_similarity)
         self.assertTrue(mean_similarity > 0.9)
+
+
+class TestFeCAM(unittest.TestCase):
+    @unittest.skipIf(not os.path.isdir(f'./data/dataset1'), 'Dataset folder does not exist')
+    def test_dataset1(self):
+        folder_name = f'./data/dataset1'
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        metric = Metrics.MahalanobisMetric(shrinkage=1, gamma_1=1, gamma_2=0, normalization=True)
+        clf = KNNClassifier(n_neighbors=1,
+                            metric=metric,
+                            data_normalization=False,
+                            tukey_lambda=1,
+                            kmeans=KMeans(n_clusters=1),
+                            device=device)
+
+        results = np.array(DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=10, only_last=False, verbose=1))
+        FeCAM_results = np.array([97.90, 94.85, 92.36, 90.40, 89.28, 88.30, 87.51, 86.60, 86.56, 85.67])
+        np.testing.assert_almost_equal(results, FeCAM_results, 2)
+
+    @unittest.skipIf(not os.path.isdir(f'./data/dataset2'), 'Dataset folder does not exist')
+    def test_dataset2(self):
+        folder_name = f'./data/dataset2'
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        metric = Metrics.MahalanobisMetric(shrinkage=2, gamma_1=1, gamma_2=1, normalization=True)
+        clf = KNNClassifier(n_neighbors=1,
+                            metric=metric,
+                            data_normalization=True,
+                            tukey_lambda=0.5,
+                            kmeans=KMeans(n_clusters=1),
+                            device=device)
+
+        results = np.array(DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=6, only_last=False, verbose=1))
+        FeCAM_results = np.array([84.16, 76.51, 72.12, 67.66, 64.53, 62.28])
+        np.testing.assert_almost_equal(results, FeCAM_results, 1)
+
+    @unittest.skipIf(not os.path.isdir(f'./data/dataset3'), 'Dataset folder does not exist')
+    def test_dataset3(self):
+        folder_name = f'./data/dataset3'
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        metric = Metrics.MahalanobisMetric(shrinkage=2, gamma_1=1, gamma_2=1, normalization=True)
+        clf = KNNClassifier(n_neighbors=1,
+                            metric=metric,
+                            data_normalization=True,
+                            tukey_lambda=0.5,
+                            kmeans=KMeans(n_clusters=1),
+                            device=device)
+
+        results = np.array(DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=6, only_last=False, verbose=1))
+        FeCAM_results = np.array([68.48, 62.55, 60.70, 58.10, 55.13, 52.49])
+        np.testing.assert_almost_equal(results, FeCAM_results, 1)
+
+    @unittest.skipIf(not os.path.isdir(f'./data/dataset4'), 'Dataset folder does not exist')
+    def test_dataset4(self):
+        folder_name = f'./data/dataset4'
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        metric = Metrics.MahalanobisMetric(shrinkage=1, gamma_1=10, gamma_2=10, normalization=True)
+        clf = KNNClassifier(n_neighbors=1,
+                            metric=metric,
+                            data_normalization=False,
+                            tukey_lambda=1,
+                            kmeans=KMeans(n_clusters=1),
+                            device=device)
+
+        results = np.array(DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=10, only_last=False, verbose=1))
+        FeCAM_results = np.array([81.21, 76.51, 72.17, 71.65, 69.70, 67.13, 66.29, 65.32, 64.42, 63.66])
+        np.testing.assert_almost_equal(results, FeCAM_results, 2)
 
 
 if __name__ == '__main__':
