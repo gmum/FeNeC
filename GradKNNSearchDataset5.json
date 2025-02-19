@@ -2,10 +2,10 @@
     "dataset_name": "dataset5",
     "n_tasks": 6,
     "verbose": 2,
-    "study_name": "Dataset5GradKNNFinalSearch",
+    "study_name": "Dataset5GradKNNFinalSearchFinalFinal",
     "model_type": "GradKNN",
     "sampler": "TPE",
-    "last_accuracy_trials": 500,
+    "last_accuracy_trials": 1000,
     "average_accuracy_trials": 100,
     "hyperparameters": {
         "gamma_1": {
@@ -39,7 +39,7 @@
         "num_epochs": 200,
         "lr": {
             "method": "suggest_float",
-            "args": [0.0001, 0.3],
+            "args": [0.0001, 1],
             "kwargs": {"log": true}
         },
         "early_stop_patience": 10,
