@@ -1,8 +1,8 @@
 {
-    "dataset_name": "dataset2",
+    "dataset_name": "dataset5",
     "n_tasks": 6,
     "verbose": 2,
-    "study_name": "Dataset2GradKNNFinalSearchFinalFinal",
+    "study_name": "Dataset5GradKNNFinalSearchFinalFinal",
     "model_type": "GradKNN",
     "sampler": "TPE",
     "last_accuracy_trials": 1000,
