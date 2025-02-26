@@ -13,7 +13,7 @@
             "metric_normalization": true,
             "is_normalization": false,
             
-            "n_clusters": [2,1,1,1,1],
+            "n_clusters": [52,53,65,50,72],
             "tukey_lambda": 1,
             "batch_size": 16,
             "n_neighbors": [1,4,1,3,1]
