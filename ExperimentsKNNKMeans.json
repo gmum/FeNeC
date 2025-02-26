@@ -41,7 +41,7 @@
     },
 
     "ImageNet-R" : {
-        "n_tasks": 6,
+        "n_tasks": 10,
         "verbose": 0,
         "n_runs": 5,
         "study_name": "KNNKMeansExperiments",
@@ -62,7 +62,7 @@
     },
 
     "ImageNet-Subset" : {
-        "n_tasks": 10,
+        "n_tasks": 6,
         "verbose": 0,
         "n_runs": 5,
         "study_name": "KNNKMeansExperiments",
