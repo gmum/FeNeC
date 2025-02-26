@@ -33,7 +33,7 @@ def is_jupyter():
     return 'ipykernel' in sys.modules
 
 
-def train(clf, folder_name, n_tasks, only_last=False, study_name=None, verbose=0):
+def train(clf, folder_name, n_tasks, only_last=False, study_name=None, return_all_accuracies=False, verbose=0):
     """
     Trains a classifier on a series of tasks, optionally testing on the test set after each task.
 
@@ -43,6 +43,7 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name=None, verbose=0
      - n_tasks (int): Number of tasks to train on.
      - only_last (bool): If True, evaluate on the test set only for the last task. If False, evaluate on all tasks.
      - study_name (str): Name of the Optuna study for logging(only used if verbose >= 2).
+     - return_all_accuracies (bool): If True, return the accuracy on all tasks. Warning: Do not set this to True while grid searching, only during experiments.
      - verbose (int): Verbosity level for logging.
 
     Returns:
@@ -51,6 +52,8 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name=None, verbose=0
 
     device = clf.device
     task_sizes = []
+
+    accuracies = []
 
     # Initialize W&B logging if verbose is high enough
     if verbose >= 2:
@@ -103,7 +106,7 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name=None, verbose=0
                 pred = clf.predict(X_test)
                 accuracy = clf.accuracy_score(y_test, pred, verbose=verbose, task_sizes=task_sizes)
                 accuracy_sum += accuracy
-
+                accuracies.append(accuracy)
                 if verbose >= 1:
                     end = time.time()
                     print(f'task {task_number}: (time: {(end - start):.4f}s)')
@@ -116,6 +119,10 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name=None, verbose=0
         if not only_last:
             wandb.log({f"average_accuracy": accuracy_sum / n_tasks})
         wandb.finish()
+        
+    if return_all_accuracies:
+        return accuracies
+    
     return accuracy
 
 
