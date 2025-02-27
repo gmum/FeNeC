@@ -4,7 +4,7 @@
         "verbose": 0,
         "n_runs": 5,
         "study_name": "GradKNNExperiments",
-        "model_type": "KNN",
+        "model_type": "GradKNN",
         "data_paths": ["/shared/sets/datasets/ViT_CIFAR/seed_1993", "/shared/sets/datasets/ViT_CIFAR/seed_1994","/shared/sets/datasets/ViT_CIFAR/seed_1995"],
         "hyperparameters": {
             "gamma_1": [6.951, 8.192, 7.410, 8.880, 6.368],
