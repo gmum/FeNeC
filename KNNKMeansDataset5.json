@@ -1,6 +1,5 @@
 {
     "dataset_name": "dataset5",
-    "custom_dataset_path": null,
     "n_tasks": 6,
     "verbose": 2,
     "study_name": "KNNKMeansDataset5",

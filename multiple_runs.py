@@ -97,15 +97,14 @@ if __name__ == "__main__":
             std_avg_accuracy = 0
 
             print("-" * 50)
-            print("-" * 50)
 
+            params = get_params(hyperparams, i)
+            print(f"Hyperparameters: {params}")
 
             for data_path in dataset_info["data_paths"]:
                 print("-" * 50)
                 print(f"Data path: {data_path}")
                 hyperparams = dataset_info["hyperparameters"]
-                params = get_params(hyperparams, i)
-                print(f"Hyperparameters: {params}")
 
                 accuracies.append(run_on_params(dataset_info, data_path, i, only_last=False))
 
@@ -129,12 +128,9 @@ if __name__ == "__main__":
 
             std_avg_accuracy = statistics.stdev(avg_accuracies)
 
+            print(f"Last accuracy: {avg_accuracies[-1]:.3f} std {std_last_accuracy:.3f}, Average accuracy: {avg_accuracies:.3f}, std {std_avg_accuracy:.3f}")
+
 
             print("Accuracies:")
             for accuracy in accuracies:
                 print(accuracy)
-            print(f"Average accuracies: {avg_accuracies}")
-            print(f"Accuracies averaged by seed: {accuracies_averaged_by_seed}")
-            print(f"Average accuracies averaged by seed: {avg_accuracies_averaged_by_seed}")
-            print(f"Standard deviation of last accuracy: {std_last_accuracy}")
-            print(f"Standard deviation of average accuracy: {std_avg_accuracy}")
