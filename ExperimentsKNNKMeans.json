@@ -2,7 +2,7 @@
     "ViT_CIFAR" : {
         "n_tasks": 10,
         "verbose": 0,
-        "n_runs": 5,
+        "n_runs": 0,
         "study_name": "KNNKMeansExperiments",
         "model_type": "KNN",
         "data_paths": ["/shared/sets/datasets/ViT_CIFAR/seed_1993", "/shared/sets/datasets/ViT_CIFAR/seed_1994","/shared/sets/datasets/ViT_CIFAR/seed_1995"],
@@ -22,7 +22,7 @@
     "ResNet_CIFAR" : {
         "n_tasks": 6,
         "verbose": 0,
-        "n_runs": 5,
+        "n_runs": 0,
         "study_name": "KNNKMeansExperiments",
         "model_type": "KNN",
         "data_paths": ["/shared/sets/datasets/ResNet_CIFAR/seed_1993", "/shared/sets/datasets/ResNet_CIFAR/seed_1994","/shared/sets/datasets/ResNet_CIFAR/seed_1995"],
@@ -50,7 +50,7 @@
         "hyperparameters": {
             "gamma_1": [8.752, 8.944, 8.862, 11.850, 9.533],
             "gamma_2": [11.146, 16.504, 15.170, 16.531, 16.131],
-            "shrinkage": 2,
+            "shrinkage": 1,
             "metric_normalization": true,
             "is_normalization": false,
             
@@ -71,7 +71,7 @@
         "hyperparameters": {
             "gamma_1": [1.183, 1.416, 1.429, 1.295, 0.832],
             "gamma_2": [0.500, 0.876, 0.862, 0.500, 0.500],
-            "shrinkage": 1,
+            "shrinkage": 2,
             "metric_normalization": true,
             "is_normalization": true,
             
@@ -85,7 +85,7 @@
     "TinyImageNet" : {
         "n_tasks": 6,
         "verbose": 0,
-        "n_runs": 5,
+        "n_runs": 0,
         "study_name": "KNNKMeansExperiments",
         "model_type": "KNN",
         "data_paths": ["/shared/sets/datasets/TinyImageNet/1993", "/shared/sets/datasets/TinyImageNet/1994","/shared/sets/datasets/TinyImageNet/1995"],
