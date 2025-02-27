@@ -128,7 +128,7 @@ if __name__ == "__main__":
 
             std_avg_accuracy = statistics.stdev(avg_accuracies)
 
-            print(f"Last accuracy: {avg_accuracies[-1]:.3f} std {std_last_accuracy:.3f}, Average accuracy: {avg_accuracies:.3f}, std {std_avg_accuracy:.3f}")
+            print(f"Last accuracy: {avg_accuracies[-1]:.3f} std {std_last_accuracy:.3f}, Average accuracy: {avg_accuracies_averaged_by_seed:.3f}, std {std_avg_accuracy:.3f}")
 
 
             print("Accuracies:")
