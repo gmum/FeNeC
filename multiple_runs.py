@@ -98,13 +98,13 @@ if __name__ == "__main__":
 
             print("-" * 50)
 
+            hyperparams = dataset_info["hyperparameters"]
             params = get_params(hyperparams, i)
             print(f"Hyperparameters: {params}")
 
             for data_path in dataset_info["data_paths"]:
                 print("-" * 50)
                 print(f"Data path: {data_path}")
-                hyperparams = dataset_info["hyperparameters"]
 
                 accuracies.append(run_on_params(dataset_info, data_path, i, only_last=False))
 
