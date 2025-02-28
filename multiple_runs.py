@@ -81,7 +81,6 @@ if __name__ == "__main__":
     for dataset_name, dataset_info in config.items():
         print("-" * 50)
         print("-" * 50)
-        print("-" * 50)
         print(f"Dataset: {dataset_name}")
         print(f"Number of tasks: {dataset_info['n_tasks']}")
         print(f"Model type: {dataset_info['model_type']}")
@@ -90,11 +89,6 @@ if __name__ == "__main__":
         for i in range(dataset_info["n_runs"]):
             print(f"Run {i + 1}")
             accuracies = []
-            avg_accuracies = []
-            accuracies_averaged_by_seed = [0 for _ in range(dataset_info["n_tasks"])]
-            avg_accuracies_averaged_by_seed = 0
-            std_last_accuracy = 0
-            std_avg_accuracy = 0
 
             print("-" * 50)
 
@@ -107,28 +101,6 @@ if __name__ == "__main__":
                 print(f"Data path: {data_path}")
 
                 accuracies.append(run_on_params(dataset_info, data_path, i, only_last=False))
-
-
-
-
-
-            for i in range(len(accuracies)):
-                avg_accuracies.append(sum(accuracies[i]) / len(accuracies[i]))
-            for i in range(len(dataset_info["data_paths"])):
-                for j in range(dataset_info["n_tasks"]):
-                    accuracies_averaged_by_seed[j] += accuracies[i][j]
-            
-            for i in range(dataset_info["n_tasks"]):
-                accuracies_averaged_by_seed[i] /= len(dataset_info["data_paths"])
-
-            avg_accuracies_averaged_by_seed = sum(accuracies_averaged_by_seed) / len(accuracies_averaged_by_seed)
-
-            last_accuracies = [a[-1] for a in accuracies]
-            std_last_accuracy = statistics.stdev(last_accuracies)
-
-            std_avg_accuracy = statistics.stdev(avg_accuracies)
-
-            print(f"Last accuracy: {avg_accuracies[-1]:.3f} std {std_last_accuracy:.3f}, Average accuracy: {avg_accuracies_averaged_by_seed:.3f}, std {std_avg_accuracy:.3f}")
 
 
             print("Accuracies:")
