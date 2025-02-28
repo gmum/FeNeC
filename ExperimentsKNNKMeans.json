@@ -2,7 +2,7 @@
     "ViT_CIFAR" : {
         "n_tasks": 10,
         "verbose": 0,
-        "n_runs": 0,
+        "n_runs": 5,
         "study_name": "KNNKMeansExperiments",
         "model_type": "KNN",
         "data_paths": ["/shared/sets/datasets/ViT_CIFAR/seed_1993", "/shared/sets/datasets/ViT_CIFAR/seed_1994","/shared/sets/datasets/ViT_CIFAR/seed_1995"],
@@ -22,7 +22,7 @@
     "ResNet_CIFAR" : {
         "n_tasks": 6,
         "verbose": 0,
-        "n_runs": 0,
+        "n_runs": 5,
         "study_name": "KNNKMeansExperiments",
         "model_type": "KNN",
         "data_paths": ["/shared/sets/datasets/ResNet_CIFAR/seed_1993", "/shared/sets/datasets/ResNet_CIFAR/seed_1994","/shared/sets/datasets/ResNet_CIFAR/seed_1995"],
@@ -85,7 +85,7 @@
     "TinyImageNet" : {
         "n_tasks": 6,
         "verbose": 0,
-        "n_runs": 0,
+        "n_runs": 5,
         "study_name": "KNNKMeansExperiments",
         "model_type": "KNN",
         "data_paths": ["/shared/sets/datasets/TinyImageNet/1993", "/shared/sets/datasets/TinyImageNet/1994","/shared/sets/datasets/TinyImageNet/1995"],
