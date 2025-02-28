@@ -2,7 +2,7 @@
     "dataset_name": "dataset1",
     "n_tasks": 10,
     "verbose": 2,
-    "study_name": "KNNKMeansDataset1",
+    "study_name": "EuclideanKNNKMeansDataset1",
     "model_type": "KNN",
     "sampler": "TPE",
     "last_accuracy_trials": 2000,

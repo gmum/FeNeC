@@ -2,7 +2,7 @@
     "dataset_name": "dataset1",
     "n_tasks": 10,
     "verbose": 2,
-    "study_name": "Dataset1GradKNNFinalSearchFinalFinal",
+    "study_name": "EuclideanDataset1GradKNNFinalSearchFinalFinal",
     "model_type": "GradKNN",
     "sampler": "TPE",
     "last_accuracy_trials": 1000,
