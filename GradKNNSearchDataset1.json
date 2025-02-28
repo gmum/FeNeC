@@ -8,14 +8,8 @@
     "last_accuracy_trials": 1000,
     "average_accuracy_trials": 100,
     "hyperparameters": {
-        "gamma_1": {
-            "method": "suggest_float",
-            "args": [0.5, 20.0]
-        },
-        "gamma_2": {
-            "method": "suggest_float",
-            "args": [0.5, 20.0]
-        },
+        "gamma_1": 1,
+        "gamma_2": 1,
         "shrinkage": 1,
         "metric_normalization": true,
         
