@@ -1,9 +1,9 @@
 {
-  "dataset_name": "dataset3",
-  "n_tasks": 6,
+  "dataset_name": "imagenetsubset_cifar",
+  "n_tasks": 10,
   "verbose": 2,
-  "study_name": "KNNKMeansDataset3",
-  "model_type": "KNN",
+  "study_name": "FeNeC_Dataset4",
+  "model_type": "FeNeC",
   "sampler": "TPE",
   "last_accuracy_trials": 2000,
   "average_accuracy_trials": 200,
@@ -22,23 +22,17 @@
         20.0
       ]
     },
-    "shrinkage": 2,
+    "shrinkage": 1,
     "metric_normalization": true,
-    "data_normalization": true,
+    "data_normalization": false,
     "n_clusters": {
       "method": "suggest_int",
       "args": [
         2,
-        75
+        50
       ]
     },
-    "tukey_lambda": {
-      "method": "suggest_float",
-      "args": [
-        0.2,
-        1
-      ]
-    },
+    "tukey_lambda": 1,
     "batch_size": 16,
     "n_neighbors": {
       "method": "suggest_int",

@@ -5,8 +5,8 @@ import torch
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support as score
 
-import Metrics
-from KMeans import KMeans
+from kmeans import KMeans
+from metrics import MahalanobisMetric
 
 
 class Classifier(abc.ABC):
@@ -37,7 +37,7 @@ class Classifier(abc.ABC):
                        isinstance(value, (str, int, float, bool))}
         if isinstance(self.kmeans, KMeans):
             self.config.update(self.kmeans.get_config())
-        if isinstance(self.metric, Metrics.MahalanobisMetric):
+        if isinstance(self.metric, MahalanobisMetric):
             self.config.update(self.metric.get_config())
 
     def fit(self, D, **kwargs):

@@ -9,10 +9,10 @@ import torch
 import torchvision
 from sklearn import datasets, neighbors, cluster
 
-import DatasetRun
-import Metrics
-from KMeans import KMeans
-from KNNClassifier import KNNClassifier
+import metrics
+import utils
+from fenec import FeNeC
+from kmeans import KMeans
 
 
 class TestMetrics(unittest.TestCase):
@@ -22,7 +22,7 @@ class TestMetrics(unittest.TestCase):
                           [[0, -3, -6], [-2, 6, 4]]])
         b = torch.tensor([[2, 3, 4]], dtype=torch.float32)
 
-        metric = Metrics.EuclideanMetric()
+        metric = metrics.EuclideanMetric()
 
         dist_test = metric.calculate(a, b).squeeze()
         dist_correct = torch.tensor([[0, torch.sqrt(torch.tensor(18))], [torch.sqrt(torch.tensor(140)), 5]])
@@ -34,7 +34,7 @@ class TestMetrics(unittest.TestCase):
         a = torch.rand((100, 3000), dtype=torch.float32)
         b = torch.rand(3000, dtype=torch.float32)
 
-        metric = Metrics.CosineMetric()
+        metric = metrics.CosineMetric()
 
         dist_test = metric.calculate(a, b)
         dist_correct = torch.tensor(sklearn.metrics.pairwise.cosine_distances(a, b.reshape(1, -1)),
@@ -47,7 +47,7 @@ class TestMetrics(unittest.TestCase):
         a = torch.mean(D, 1).unsqueeze(1).unsqueeze(0)
         b = torch.tensor([[2, 4]]).unsqueeze(1).unsqueeze(1)
 
-        metric = Metrics.MahalanobisMetric(normalization=False)
+        metric = metrics.MahalanobisMetric(normalization=False)
         metric.preprocess(D)
 
         dist_test = metric.calculate(a, b)
@@ -60,7 +60,7 @@ class TestMetrics(unittest.TestCase):
         a = torch.mean(D, 1).unsqueeze(1).unsqueeze(0)
         b = torch.tensor([[2, 4], [-3, 0], [1, 2]]).unsqueeze(1).unsqueeze(1)
 
-        metric = Metrics.MahalanobisMetric(normalization=False)
+        metric = metrics.MahalanobisMetric(normalization=False)
         metric.preprocess(D)
 
         dist_test = metric.calculate(a, b)
@@ -75,7 +75,7 @@ class TestKNNClassifier(unittest.TestCase):
         y = torch.tensor([0, 1, 1, 0, 0])
         D = torch.tensor([[[3, 2], [4, 2]], [[-5, 3], [2, 0]]])
 
-        self.assertTrue(torch.equal(KNNClassifier.getD(X, y), D))
+        self.assertTrue(torch.equal(FeNeC.getD(X, y), D))
 
     def moons_sklearn_helper(self, metric, metric_sklearn):
         """ Helper function to test the KNN classifier with the moons dataset against sklearn's implementation. """
@@ -92,7 +92,7 @@ class TestKNNClassifier(unittest.TestCase):
         X_test, y_test = torch.tensor(X_test, dtype=torch.float32), torch.tensor(y_test)
 
         # Transform X_train and y_train into D for my KNN
-        D = KNNClassifier.getD(X_train, y_train).to(device)
+        D = FeNeC.getD(X_train, y_train).to(device)
 
         # Transform D into X_train and y_train for sklearn KNN (so that it has the same samples as my KNN)
         X_train = D.reshape(-1, 2).cpu()
@@ -100,9 +100,9 @@ class TestKNNClassifier(unittest.TestCase):
 
         # Initialize my KNN and predict classes of some test samples
         start = time.time()
-        knn1 = KNNClassifier(n_neighbors=n_neighbors, metric=metric, device=device).fit(D)
+        knn1 = FeNeC(n_neighbors=n_neighbors, metric=metric, device=device).fit(D)
         pred1 = knn1.predict(X_test.to(device))
-        print('my knn: ', time.time() - start, KNNClassifier.accuracy_score(y_test.to(device), pred1))
+        print('my knn: ', time.time() - start, FeNeC.accuracy_score(y_test.to(device), pred1))
 
         if metric_sklearn != 'mahalanobis':
             # Initialize sklearn KNN and predict classes of some test samples
@@ -115,16 +115,16 @@ class TestKNNClassifier(unittest.TestCase):
             self.assertTrue(torch.equal(pred1.cpu(), pred2))
 
     def test_moons_sklearn_euclidean(self):
-        self.moons_sklearn_helper(Metrics.EuclideanMetric(), 'euclidean')
+        self.moons_sklearn_helper(metrics.EuclideanMetric(), 'euclidean')
 
     """
     Small differences in floating-point values can lead to an excessively large impact.
     def test_moons_sklearn_cosine(self):
-        self.moons_sklearn_helper(Metrics.CosineMetric(), 'cosine')
+        self.moons_sklearn_helper(metrics.CosineMetric(), 'cosine')
     """
 
     def test_moons_sklearn_mahalanobis(self):
-        self.moons_sklearn_helper(Metrics.MahalanobisMetric(True, True), 'mahalanobis')
+        self.moons_sklearn_helper(metrics.MahalanobisMetric(True, True), 'mahalanobis')
 
     def mnist_sklearn_helper(self, metric, metric_sklearn):
         """ Helper function to test the KNN classifier with the MNIST dataset against sklearn's implementation. """
@@ -143,7 +143,7 @@ class TestKNNClassifier(unittest.TestCase):
         y_test = test.targets[:1000]
 
         # Transform X_train and y_train into D for my KNN (which requires the same amount of samples per each class)
-        D = KNNClassifier.getD(X_train, y_train).to(device)
+        D = FeNeC.getD(X_train, y_train).to(device)
 
         # Transform D into X_train and y_train for sklearn KNN (so that it has the same samples as my KNN)
         X_train = D.reshape(-1, 28 * 28).cpu()
@@ -151,9 +151,9 @@ class TestKNNClassifier(unittest.TestCase):
 
         # Initialize my KNN and predict classes of some test samples
         start = time.time()
-        knn1 = KNNClassifier(n_neighbors=n_neighbors, metric=metric, device=device).fit(D)
+        knn1 = FeNeC(n_neighbors=n_neighbors, metric=metric, device=device).fit(D)
         pred1 = knn1.predict(X_test.to(device))
-        print('my knn: ', time.time() - start, KNNClassifier.accuracy_score(y_test.to(device), pred1))
+        print('my knn: ', time.time() - start, FeNeC.accuracy_score(y_test.to(device), pred1))
 
         if metric_sklearn != 'mahalanobis':
             # Initialize sklearn KNN and predict classes of some test samples
@@ -166,13 +166,13 @@ class TestKNNClassifier(unittest.TestCase):
             self.assertTrue(torch.equal(pred1.cpu(), pred2))
 
     def test_mnist_sklearn_euclidean(self):
-        self.mnist_sklearn_helper(Metrics.EuclideanMetric(), 'euclidean')
+        self.mnist_sklearn_helper(metrics.EuclideanMetric(), 'euclidean')
 
     def test_mnist_sklearn_cosine(self):
-        self.mnist_sklearn_helper(Metrics.CosineMetric(), 'cosine')
+        self.mnist_sklearn_helper(metrics.CosineMetric(), 'cosine')
 
     def test_mnist_sklearn_mahalanobis(self):
-        self.mnist_sklearn_helper(Metrics.MahalanobisMetric(True, True), 'mahalanobis')
+        self.mnist_sklearn_helper(metrics.MahalanobisMetric(True, True), 'mahalanobis')
 
     def test_kmeans(self):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -188,7 +188,7 @@ class TestKNNClassifier(unittest.TestCase):
             centroids1 = KMeans(15).fit_predict(X.to(device).unsqueeze(0)).cpu().squeeze(0)
             centroids2 = torch.tensor(sklearn.cluster.KMeans(15).fit(X).cluster_centers_)
 
-            distances = Metrics.EuclideanMetric().calculate(centroids1, centroids2)
+            distances = metrics.EuclideanMetric().calculate(centroids1, centroids2)
             similarity_matrix = 1 - (distances / distances.max())
 
             row_indices, col_indices = scipy.optimize.linear_sum_assignment(similarity_matrix, maximize=True)
@@ -207,15 +207,16 @@ class TestFeCAM(unittest.TestCase):
         folder_name = f'./data/dataset1'
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        metric = Metrics.MahalanobisMetric(shrinkage=1, gamma_1=1, gamma_2=0, normalization=True)
-        clf = KNNClassifier(n_neighbors=1,
-                            metric=metric,
-                            data_normalization=False,
-                            tukey_lambda=1,
-                            kmeans=KMeans(n_clusters=1),
-                            device=device)
+        metric = metrics.MahalanobisMetric(shrinkage=1, gamma_1=1, gamma_2=0, normalization=True)
+        clf = FeNeC(n_neighbors=1,
+                    metric=metric,
+                    data_normalization=False,
+                    tukey_lambda=1,
+                    kmeans=KMeans(n_clusters=1),
+                    device=device)
 
-        results = np.array(DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=10, only_last=False, verbose=1))
+        results = np.array(utils.train(clf=clf, folder_name=folder_name, n_tasks=10, only_last=False,
+                                       return_all_accuracies=True, verbose=1))
         FeCAM_results = np.array([97.90, 94.85, 92.36, 90.40, 89.28, 88.30, 87.51, 86.60, 86.56, 85.67])
         np.testing.assert_almost_equal(results, FeCAM_results, 2)
 
@@ -224,15 +225,16 @@ class TestFeCAM(unittest.TestCase):
         folder_name = f'./data/dataset2'
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        metric = Metrics.MahalanobisMetric(shrinkage=2, gamma_1=1, gamma_2=1, normalization=True)
-        clf = KNNClassifier(n_neighbors=1,
-                            metric=metric,
-                            data_normalization=True,
-                            tukey_lambda=0.5,
-                            kmeans=KMeans(n_clusters=1),
-                            device=device)
+        metric = metrics.MahalanobisMetric(shrinkage=2, gamma_1=1, gamma_2=1, normalization=True)
+        clf = FeNeC(n_neighbors=1,
+                    metric=metric,
+                    data_normalization=True,
+                    tukey_lambda=0.5,
+                    kmeans=KMeans(n_clusters=1),
+                    device=device)
 
-        results = np.array(DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=6, only_last=False, verbose=1))
+        results = np.array(utils.train(clf=clf, folder_name=folder_name, n_tasks=6, only_last=False,
+                                       return_all_accuracies=True, verbose=1))
         FeCAM_results = np.array([84.16, 76.51, 72.12, 67.66, 64.53, 62.28])
         np.testing.assert_almost_equal(results, FeCAM_results, 1)
 
@@ -241,15 +243,16 @@ class TestFeCAM(unittest.TestCase):
         folder_name = f'./data/dataset3'
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        metric = Metrics.MahalanobisMetric(shrinkage=2, gamma_1=1, gamma_2=1, normalization=True)
-        clf = KNNClassifier(n_neighbors=1,
-                            metric=metric,
-                            data_normalization=True,
-                            tukey_lambda=0.5,
-                            kmeans=KMeans(n_clusters=1),
-                            device=device)
+        metric = metrics.MahalanobisMetric(shrinkage=2, gamma_1=1, gamma_2=1, normalization=True)
+        clf = FeNeC(n_neighbors=1,
+                    metric=metric,
+                    data_normalization=True,
+                    tukey_lambda=0.5,
+                    kmeans=KMeans(n_clusters=1),
+                    device=device)
 
-        results = np.array(DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=6, only_last=False, verbose=1))
+        results = np.array(utils.train(clf=clf, folder_name=folder_name, n_tasks=6, only_last=False,
+                                       return_all_accuracies=True, verbose=1))
         FeCAM_results = np.array([68.48, 62.55, 60.70, 58.10, 55.13, 52.49])
         np.testing.assert_almost_equal(results, FeCAM_results, 1)
 
@@ -258,15 +261,16 @@ class TestFeCAM(unittest.TestCase):
         folder_name = f'./data/dataset4'
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        metric = Metrics.MahalanobisMetric(shrinkage=1, gamma_1=10, gamma_2=10, normalization=True)
-        clf = KNNClassifier(n_neighbors=1,
-                            metric=metric,
-                            data_normalization=False,
-                            tukey_lambda=1,
-                            kmeans=KMeans(n_clusters=1),
-                            device=device)
+        metric = metrics.MahalanobisMetric(shrinkage=1, gamma_1=10, gamma_2=10, normalization=True)
+        clf = FeNeC(n_neighbors=1,
+                    metric=metric,
+                    data_normalization=False,
+                    tukey_lambda=1,
+                    kmeans=KMeans(n_clusters=1),
+                    device=device)
 
-        results = np.array(DatasetRun.train(clf=clf, folder_name=folder_name, n_tasks=10, only_last=False, verbose=1))
+        results = np.array(utils.train(clf=clf, folder_name=folder_name, n_tasks=10, only_last=False,
+                                       return_all_accuracies=True, verbose=1))
         FeCAM_results = np.array([81.21, 76.51, 72.17, 71.65, 69.70, 67.13, 66.29, 65.32, 64.42, 63.66])
         np.testing.assert_almost_equal(results, FeCAM_results, 2)
 

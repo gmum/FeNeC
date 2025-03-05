@@ -13,7 +13,7 @@ def analyze_hyperparameter_importance(study_name):
     Analyzes hyperparameter importance for a given Optuna study.
     
     Parameters:
-        study_name (str): Name of the Optuna study in the database.
+     - study_name (str): Name of the Optuna study in the database.
     """
     try:
         # Load the study

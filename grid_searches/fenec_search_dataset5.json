@@ -1,9 +1,9 @@
 {
-  "dataset_name": "dataset2",
+  "dataset_name": "tinyimagenet_cifar",
   "n_tasks": 6,
   "verbose": 2,
-  "study_name": "KNNKMeansDataset2",
-  "model_type": "KNN",
+  "study_name": "FeNeC_Dataset5",
+  "model_type": "FeNeC",
   "sampler": "TPE",
   "last_accuracy_trials": 2000,
   "average_accuracy_trials": 200,
@@ -24,7 +24,7 @@
     },
     "shrinkage": 2,
     "metric_normalization": true,
-    "data_normalization": true,
+    "is_normalization": true,
     "n_clusters": {
       "method": "suggest_int",
       "args": [

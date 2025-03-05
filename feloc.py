@@ -3,15 +3,15 @@ import torch.nn.functional as F
 import wandb
 from torch.utils.data import DataLoader, TensorDataset, ConcatDataset, random_split
 
-from Classifier import Classifier
+from classifier import Classifier
 
 
-class GradKNNClassifier(Classifier):
+class FeLoC(Classifier):
     def __init__(self, optimizer="SGD", n_points=10, mode=0, num_epochs=200, lr=0.01, early_stop_patience=10,
                  reg_type=None, reg_lambda=None, normalization_type=None, tanh_x=None, centroids_new_old_ratio=None,
-                 train_only_on_first_task=True, dataloader_batch_size=64, verbose=1, *args, **kwargs):
+                 train_only_on_first_task=True, dataloader_batch_size=64, *args, **kwargs):
         """
-        Initializes the GradKNNClassifier.
+        Initializes FeLoC.
 
         Parameters:
          - optimizer (string): Name of the optimizer to use.
@@ -248,7 +248,7 @@ class GradKNNClassifier(Classifier):
 
             if verbose >= 1:
                 # Save parameters for later study.
-                if epoch % 5 == 0:
+                if epoch % 10 == 0:
                     print(f"Validation Accuracy after Epoch [{epoch + 1}/{self.num_epochs}]: {valid_accuracy:.2f}%, "
                           f"Loss = {avg_valid_loss:.4f},")
 
@@ -292,7 +292,6 @@ class GradKNNClassifier(Classifier):
         # Calculate features for all points in the current task
         X = torch.cat([self.metric.calculate_batch(
             self.n_nearest_points,
-            # For mode 1, train all the classes, and for mode 0, train only the current task:
             self.D_centroids,
             d_class,
             self.batch_size)

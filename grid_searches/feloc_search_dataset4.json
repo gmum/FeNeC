@@ -1,0 +1,66 @@
+{
+  "dataset_name": "imagenetsubset_cifar",
+  "n_tasks": 10,
+  "verbose": 2,
+  "study_name": "FeLoC_Dataset4",
+  "model_type": "GradKNN",
+  "sampler": "TPE",
+  "last_accuracy_trials": 500,
+  "average_accuracy_trials": 100,
+  "hyperparameters": {
+    "gamma_1": {
+      "method": "suggest_float",
+      "args": [
+        0.5,
+        20.0
+      ]
+    },
+    "gamma_2": {
+      "method": "suggest_float",
+      "args": [
+        0.5,
+        20.0
+      ]
+    },
+    "shrinkage": 1,
+    "metric_normalization": true,
+    "n_clusters": {
+      "method": "suggest_int",
+      "args": [
+        2,
+        40
+      ]
+    },
+    "data_normalization": false,
+    "tukey_lambda": 1,
+    "batch_size": 16,
+    "optimizer": "SGD",
+    "n_points": {
+      "method": "suggest_int",
+      "args": [
+        1,
+        40
+      ]
+    },
+    "mode": 0,
+    "num_epochs": 1000,
+    "lr": {
+      "method": "suggest_float",
+      "args": [
+        0.0001,
+        0.3
+      ],
+      "kwargs": {
+        "log": true
+      }
+    },
+    "early_stop_patience": 10,
+    "reg_type": 0,
+    "reg_lambda": 0,
+    "normalization_type": null,
+    "tanh_x": null,
+    "centroids_new_old_ratio": null,
+    "train_only_on_first_task": true,
+    "dataloader_batch_size": 64
+  }
+}

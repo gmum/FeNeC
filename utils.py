@@ -63,11 +63,11 @@ def train(clf, folder_name, n_tasks, only_last=False, study_name=None, return_al
 
         with h5py.File(current_file, "r") as f:
             # Load training and testing data from the HDF5 file
-            X_train = torch.tensor(np.array(f["X_train"]), dtype=torch.float32, device=device)
-            y_train = torch.tensor(np.array(f["y_train"]), dtype=torch.float32, device=device)
+            X_train = torch.tensor(f["X_train"][:], dtype=torch.float32, device=device)
+            y_train = torch.tensor(f["y_train"][:], dtype=torch.float32, device=device)
 
-            X_test = torch.tensor(np.array(f["X_test"]), dtype=torch.float32, device=device)
-            y_test = torch.tensor(np.array(f["y_test"]), dtype=torch.float32, device=device)
+            X_test = torch.tensor(f["X_test"][:], dtype=torch.float32, device=device)
+            y_test = torch.tensor(f["y_test"][:], dtype=torch.float32, device=device)
 
             # Group training samples by class
             D = [X_train[y_train == y_class] for y_class in y_train.unique()]
