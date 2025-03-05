@@ -12,7 +12,7 @@
     "gamma_2": 1,
     "shrinkage": 1,
     "metric_normalization": true,
-    "is_normalization": false,
+    "data_normalization": false,
     "n_clusters": {
       "method": "suggest_int",
       "args": [

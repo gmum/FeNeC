@@ -31,7 +31,7 @@
         75
       ]
     },
-    "is_normalization": true,
+    "data_normalization": true,
     "tukey_lambda": {
       "method": "suggest_float",
       "args": [

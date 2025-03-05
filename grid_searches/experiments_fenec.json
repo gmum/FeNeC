@@ -27,7 +27,7 @@
       ],
       "shrinkage": 1,
       "metric_normalization": true,
-      "is_normalization": false,
+      "data_normalization": false,
       "n_clusters": [
         52,
         53,
@@ -74,7 +74,7 @@
       ],
       "shrinkage": 2,
       "metric_normalization": true,
-      "is_normalization": true,
+      "data_normalization": true,
       "n_clusters": [
         48,
         64,
@@ -127,7 +127,7 @@
       ],
       "shrinkage": 1,
       "metric_normalization": true,
-      "is_normalization": false,
+      "data_normalization": false,
       "n_clusters": [
         3,
         4,
@@ -174,7 +174,7 @@
       ],
       "shrinkage": 2,
       "metric_normalization": true,
-      "is_normalization": true,
+      "data_normalization": true,
       "n_clusters": [
         61,
         64,
@@ -227,7 +227,7 @@
       ],
       "shrinkage": 2,
       "metric_normalization": true,
-      "is_normalization": true,
+      "data_normalization": true,
       "n_clusters": [
         18,
         59,

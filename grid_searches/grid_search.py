@@ -60,14 +60,14 @@ def objective(trial, config, only_last=False):
             n_neighbors=hyperparams["n_neighbors"],
             metric=metric,
             tukey_lambda=hyperparams["tukey_lambda"],
-            is_normalization=hyperparams["is_normalization"],
+            data_normalization=hyperparams["data_normalization"],
             kmeans=kmeans,
             device=device
         )
     else:
         clf = FeLoC(
             metric=metric,
-            is_normalization=hyperparams["is_normalization"],
+            data_normalization=hyperparams["data_normalization"],
             tukey_lambda=hyperparams["tukey_lambda"],
             kmeans=kmeans,
             device=device,
