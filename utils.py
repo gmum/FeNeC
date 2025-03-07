@@ -218,47 +218,113 @@ def plot_accuracy_trials(study_name, path='./results/', ylim=True):
     plt.show()
 
 
-def format_param_name(param_name):
+def plot_acc_param_hue(dataf, x_name, y_name, hue_name, ylim=True, ylim_set=None, xlim_set=None, only_later=None,
+                       fig_size=(10, 6), font_scale=1.5, path_to_pdf=None, title_pad=None, label_pad=None,
+                       palette='viridis', show_bar=True, s_plot=50, alpha_plot=0.6, bar_lim=(None, None)):
     """
-    Converts parameter names like 'gamma_1' into LaTeX-style symbols ('$\\gamma_{1}$').
+    Create a Seaborn scatter plot of accuracy vs. a given parameter.
 
     Parameters:
-     - param_name (str): The parameter name to format (e.g., "gamma_1", "lambda_2", "alpha", "n_points").
+     - dataf (DataFrame): The dataset with the grid search results
+     - x_name (str): The name of the x parameter (e.g., "gamma_1").
+     - y_name (str): The name of the y parameter (e.g., "accuracy").
+     - hue_name (str): The name of the parameter used for colors (e.g., "n_clusters").
+     - ylim (bool): If True, remove points with unusually low accuracy (using the rule: below mean - std).
+     - ylim_set (float): If not None, set it as the y-axis lower limit.
+     - xlim_set (tuple of float): If not None, set it as the x-axis limits.
+     - only_later (float): If not None, use only the later part of the data (between 0 and 1).
+     - fig_size (tuple of float): Figure size in inches, e.g. (width, height). Default is (10, 6).
+     - font_scale (float): Scaling factor for fonts (labels, ticks). Increase for a paper‐quality figure.
+     - path_to_pdf (str): If not None, the plot will be saved to the given file path in PDF format.
+     - title_pad (int): Padding around the title to make the plots consistent.
+     - label_pad (int): Padding around the x label to make the plots consistent.
+     - palette (str): The color palette to use.
+     - show_bar (bool): Whether to show the bar.
+     - s_plot (float): The size of the dots in the scatterplot.
+     - alpha_plot (float): The alpha of the dots in the scatterplot.
+     - bar_lim (tuple of float): If not None, set it as the bar limits.
     """
-    # A Map of parameters that needs to be changed in the final
-    param_name_map = {"tukey_lambda": "lambda", "lr": "Learning rate",
-                      "n_points": "$N_{points}$", "n_clusters": "$N_{clusters}$", "n_neighbors": "$N_{neighbors}$"}
-    if param_name in param_name_map:
-        param_name = param_name_map[param_name]
+    dataf['params_accuracy'] = dataf['value']
+    param_vals = dataf[f'params_{x_name}'].values
+    accuracies = dataf[f'params_{y_name}'].values
+    z_vals = dataf[f'params_{hue_name}'].values
+    title = format_param_accuracy_title(x_name, y_name)
 
-    # List of Greek letters that should be replaced with LaTeX symbols
-    greek_letters = ["alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda", "sigma", "omega"]
+    # Remove first data samples: For example for Optuna grid searches which are less representative then
+    if only_later:
+        new_starting_pos = int((1 - only_later) * len(param_vals))
+        param_vals = param_vals[new_starting_pos:]
+        accuracies = accuracies[new_starting_pos:]
+        z_vals = z_vals[new_starting_pos:]
 
-    # Regular expression to extract:
-    # - A base name (e.g., "gamma", "lambda")
-    # - Any additional text after the main name (e.g., "knn" in "gamma_1 knn")
-    match = re.match(r"([a-zA-Z]+)(?:_(\d+))?(.*)", param_name)
+    # Apply y-axis filtering: Remove low-accuracy outliers
+    if ylim:
+        lower_bound = accuracies.mean() - accuracies.std() if ylim_set is None else ylim_set
+        keep = accuracies >= lower_bound
+        param_vals = param_vals[keep]
+        z_vals = z_vals[keep]
+        accuracies = accuracies[keep]
 
-    if match:
-        base, subscript, extra_text = match.groups()  # Extract base name, optional subscript, and extra text
+    # Apply x-axis limit:
+    if xlim_set is not None:
+        keep = (xlim_set[0] <= param_vals) & (param_vals <= xlim_set[1])
+        param_vals = param_vals[keep]
+        z_vals = z_vals[keep]
+        accuracies = accuracies[keep]
 
-        # If the base name is a recognized Greek letter, format it as LaTeX
-        if base in greek_letters:
-            formatted = fr"$\{base}$"  # Converts "gamma" → "$\gamma$"
-            if subscript:
-                formatted = formatted[:-1] + f"_{{{subscript}}}$"  # Adds subscript: "$\gamma$" → "$\gamma_{1}$"
-            return formatted + extra_text  # Preserve any extra text (e.g., " knn")
+    # Create a Pandas DataFrame for Seaborn
+    df = pd.DataFrame({'x_param': param_vals, 'y_param': accuracies, 'hue_param': z_vals})
 
-    # If the name is not in the Greek letter list, return it unchanged
-    return param_name
+    # Set up Seaborn's styling for a clean, paper-quality plot
+    sns.set_context("paper", font_scale=font_scale)
+    sns.set_style("whitegrid", {"grid.linestyle": "--"})
 
+    fig, ax = plt.subplots(figsize=(fig_size[0] + 1.45 * show_bar, fig_size[1]))
 
-def format_param_accuracy_title(param_name):
-    formatted_param_name = format_param_name(param_name)
-    if formatted_param_name[0] == '$':
-        return r'$\text{Accuracy vs }' + formatted_param_name[1:]
-    else:
-        return r'$\text{Accuracy vs ' + formatted_param_name + '}$'
+    # Set up normalization and scalar mappable for the colorbar
+    norm = plt.Normalize(vmin=bar_lim[0] if (bar_lim[0] is not None) else df['hue_param'].min(),
+                         vmax=bar_lim[1] if (bar_lim[1] is not None) else df['hue_param'].max())
+    sm = plt.cm.ScalarMappable(cmap=palette, norm=norm)
+    sm.set_array([])
+
+    # Create the scatter plot
+    sns.scatterplot(
+        data=df,
+        x='x_param',
+        y='y_param',
+        hue='hue_param',
+        hue_norm=norm,
+        palette=palette,
+        legend=False,
+        s=s_plot,
+        alpha=alpha_plot,
+        ax=ax
+    )
+
+    # Format the parameter name and title for display (e.g., convert "gamma_1" → "$\gamma_{1}$")
+    ax.set_title(title, fontsize=font_scale * 14, fontweight="bold", pad=title_pad)
+    ax.set_xlabel(format_param_name(x_name), fontsize=font_scale * 12, labelpad=label_pad)
+    ax.set_ylabel(format_param_name(y_name), fontsize=font_scale * 12)
+    if xlim_set is not None:
+        ax.set_xlim(xlim_set[0], xlim_set[1])
+
+    # Add the colorbar to the figure using the created axes
+    if show_bar:
+        cbar = fig.colorbar(sm, ax=ax)
+        cbar.set_label(format_param_name(hue_name), fontsize=font_scale * 12)
+
+    # Adjust tick label size for readability
+    ax.tick_params(axis="both", which="major", labelsize=font_scale * 10)
+
+    # Improve layout to prevent overlapping elements
+    plt.tight_layout()
+
+    # Save to PDF if a file path is provided
+    if path_to_pdf is not None:
+        plt.savefig(path_to_pdf, format="pdf", dpi=300, bbox_inches='tight', transparent=True, pad_inches=0.01)
+
+    if ax is None:
+        plt.show()  # Display the plot
 
 
 def plot_param_accuracy(param_name, param_vals, accuracies, ylim=True, ylim_set=None, xlim_set=None,
@@ -273,7 +339,7 @@ def plot_param_accuracy(param_name, param_vals, accuracies, ylim=True, ylim_set=
      - accuracies (np.ndarray): An array of accuracies corresponding to each run (y-axis values).
      - ylim (bool): If True, remove points with unusually low accuracy (using the rule: below mean - std).
      - ylim_set (float): If not None, set it as the y-axis lower limit.
-     - ylim_set (tuple of float): If not None, set it as the x-axis limits.
+     - xlim_set (tuple of float): If not None, set it as the x-axis limits.
      - only_later (float): If not None, use only the later part of the data (between 0 and 1).
      - fig_size (tuple of int): Figure size in inches, e.g. (width, height). Default is (10, 6).
      - font_scale (float): Scaling factor for fonts (labels, ticks). Increase for a paper‐quality figure.
@@ -320,6 +386,8 @@ def plot_param_accuracy(param_name, param_vals, accuracies, ylim=True, ylim_set=
     formatted_param_name = format_param_name(param_name)
     ax.set_xlabel(formatted_param_name, fontsize=font_scale * 12, labelpad=label_pad)
     ax.set_ylabel(r"$\text{Accuracy (%)}$", fontsize=font_scale * 12)
+    if xlim_set is not None:
+        ax.set_xlim(xlim_set[0], xlim_set[1])
 
     # Add a title if provided
     if title:
@@ -383,30 +451,52 @@ def plot_params_accuracy(study_name, path='./results/', columns=3, ylim=True, on
     plt.show()
 
 
-def print_results(study_name, path='./results/', only_important=True):
+def format_param_name(param_name):
     """
-    Prints the sorted results of an Optuna study.
+    Converts parameter names like 'gamma_1' into LaTeX-style symbols ('$\\gamma_{1}$').
 
     Parameters:
-     - study_name (str): Name of the study.
-     - path (str): Path to the results' folder.
-     - only_important (bool): If True, only prints the accuracy and hyperparameter values.
-
-    Returns:
-     - pd.DataFrame: Sorted DataFrame with the top results.
+     - param_name (str): The parameter name to format (e.g., "gamma_1", "lambda_2", "alpha", "n_points").
     """
-    df = load_from_csv(study_name, path)
-    df_sorted = df.sort_values(by=['value'], ascending=False)
+    # A Map of parameters that needs to be changed in the final
+    param_name_map = {"tukey_lambda": r"$\lambda$", "lr": r"$\text{Learning rate}$", "n_points": "$N_{points}$",
+                      "n_clusters": "$N_{clusters}$", "n_neighbors": "$N_{neighbors}$",
+                      "accuracy": r"$\text{Accuracy (%)}$", }
+    if param_name in param_name_map:
+        return param_name_map[param_name]
 
-    # Optionally drop unimportant columns
-    if only_important:
-        for key in df_sorted.keys():
-            if key.startswith('params_'):
-                df_sorted[key[7:]] = df_sorted[key]
-            if key != "value":
-                df_sorted.drop(key, axis=1, inplace=True)
+    # List of Greek letters that should be replaced with LaTeX symbols
+    greek_letters = ["alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda", "sigma", "omega"]
 
-    return df_sorted
+    # Regular expression to extract:
+    # - A base name (e.g., "gamma", "lambda")
+    # - Any additional text after the main name (e.g., "knn" in "gamma_1 knn")
+    match = re.match(r"([a-zA-Z]+)(?:_(\d+))?(.*)", param_name)
+
+    if match:
+        base, subscript, extra_text = match.groups()  # Extract base name, optional subscript, and extra text
+
+        # If the base name is a recognized Greek letter, format it as LaTeX
+        if base in greek_letters:
+            formatted = fr"$\{base}$"  # Converts "gamma" → "$\gamma$"
+            if subscript:
+                formatted = formatted[:-1] + f"_{{{subscript}}}$"  # Adds subscript: "$\gamma$" → "$\gamma_{1}$"
+            return formatted + extra_text  # Preserve any extra text (e.g., " knn")
+
+    # If the name is not in the Greek letter list, return it unchanged
+    return param_name
+
+
+def format_param_accuracy_title(param_name, y_name="Accuracy"):
+    formatted_param_name = format_param_name(param_name)
+    if y_name.lower() == "accuracy":
+        y_name = r'$\text{Accuracy}$'
+    else:
+        y_name = format_param_name(y_name)
+    if formatted_param_name[0] == '$':
+        return y_name + r'$\text{ vs }' + formatted_param_name[1:]
+    else:
+        return y_name + r'$\text{ vs }' + formatted_param_name + '}$'
 
 
 def plot_gradknn_parameters(classes, file_path='data.csv', n_cols=3, row_height=3, col_width=5):
@@ -464,6 +554,32 @@ def plot_gradknn_parameters(classes, file_path='data.csv', n_cols=3, row_height=
     # Adjust layout
     plt.tight_layout()
     plt.show()
+
+
+def print_results(study_name, path='./results/', only_important=True):
+    """
+    Prints the sorted results of an Optuna study.
+
+    Parameters:
+     - study_name (str): Name of the study.
+     - path (str): Path to the results' folder.
+     - only_important (bool): If True, only prints the accuracy and hyperparameter values.
+
+    Returns:
+     - pd.DataFrame: Sorted DataFrame with the top results.
+    """
+    df = load_from_csv(study_name, path)
+    df_sorted = df.sort_values(by=['value'], ascending=False)
+
+    # Optionally drop unimportant columns
+    if only_important:
+        for key in df_sorted.keys():
+            if key.startswith('params_'):
+                df_sorted[key[7:]] = df_sorted[key]
+            if key != "value":
+                df_sorted.drop(key, axis=1, inplace=True)
+
+    return df_sorted
 
 
 def analyze_hyperparameter_importance(study_name):
