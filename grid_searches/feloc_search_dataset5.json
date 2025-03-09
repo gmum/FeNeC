@@ -54,7 +54,7 @@
       "method": "suggest_float",
       "args": [
         0.0001,
-        1
+        0.3
       ],
       "kwargs": {
         "log": true
