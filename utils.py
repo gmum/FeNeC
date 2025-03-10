@@ -219,7 +219,7 @@ def plot_accuracy_trials(study_name, path='./results/', ylim=True):
 
 
 def plot_acc_param_hue(dataf, x_name, y_name, hue_name, ylim=True, ylim_set=None, xlim_set=None, only_later=None,
-                       fig_size=(10, 6), font_scale=1.5, path_to_pdf=None, title_pad=None, label_pad=None,
+                       fig_size=(10, 6), font_scale=1.5, path_to_pdf=None, title_pad=None, label_pad=None, line_style=0,
                        palette='viridis', show_bar=True, s_plot=50, alpha_plot=0.6, bar_lim=(None, None)):
     """
     Create a Seaborn scatter plot of accuracy vs. a given parameter.
@@ -238,6 +238,7 @@ def plot_acc_param_hue(dataf, x_name, y_name, hue_name, ylim=True, ylim_set=None
      - path_to_pdf (str): If not None, the plot will be saved to the given file path in PDF format.
      - title_pad (int): Padding around the title to make the plots consistent.
      - label_pad (int): Padding around the x label to make the plots consistent.
+     - line_style (int): What line style to use to visualize the best accuracy (0/1/2)
      - palette (str): The color palette to use.
      - show_bar (bool): Whether to show the bar.
      - s_plot (float): The size of the dots in the scatterplot.
@@ -246,7 +247,7 @@ def plot_acc_param_hue(dataf, x_name, y_name, hue_name, ylim=True, ylim_set=None
     """
     dataf['params_accuracy'] = dataf['value']
     param_vals = dataf[f'params_{x_name}'].values
-    accuracies = dataf[f'params_{y_name}'].values
+    y_vals = dataf[f'params_{y_name}'].values
     z_vals = dataf[f'params_{hue_name}'].values
     title = format_param_accuracy_title(x_name, y_name)
 
@@ -254,26 +255,26 @@ def plot_acc_param_hue(dataf, x_name, y_name, hue_name, ylim=True, ylim_set=None
     if only_later:
         new_starting_pos = int((1 - only_later) * len(param_vals))
         param_vals = param_vals[new_starting_pos:]
-        accuracies = accuracies[new_starting_pos:]
+        y_vals = y_vals[new_starting_pos:]
         z_vals = z_vals[new_starting_pos:]
 
     # Apply y-axis filtering: Remove low-accuracy outliers
     if ylim:
-        lower_bound = accuracies.mean() - accuracies.std() if ylim_set is None else ylim_set
-        keep = accuracies >= lower_bound
+        lower_bound = y_vals.mean() - y_vals.std() if ylim_set is None else ylim_set
+        keep = y_vals >= lower_bound
         param_vals = param_vals[keep]
         z_vals = z_vals[keep]
-        accuracies = accuracies[keep]
+        y_vals = y_vals[keep]
 
     # Apply x-axis limit:
     if xlim_set is not None:
         keep = (xlim_set[0] <= param_vals) & (param_vals <= xlim_set[1])
         param_vals = param_vals[keep]
         z_vals = z_vals[keep]
-        accuracies = accuracies[keep]
+        y_vals = y_vals[keep]
 
     # Create a Pandas DataFrame for Seaborn
-    df = pd.DataFrame({'x_param': param_vals, 'y_param': accuracies, 'hue_param': z_vals})
+    df = pd.DataFrame({'x_param': param_vals, 'y_param': y_vals, 'hue_param': z_vals})
 
     # Set up Seaborn's styling for a clean, paper-quality plot
     sns.set_context("paper", font_scale=font_scale)
@@ -300,6 +301,17 @@ def plot_acc_param_hue(dataf, x_name, y_name, hue_name, ylim=True, ylim_set=None
         alpha=alpha_plot,
         ax=ax
     )
+
+    if line_style == 1:
+        best_idx = y_vals.argmax()
+        best_x = param_vals[best_idx]
+        ax.axvline(best_x, color='red', linestyle='-', linewidth=1.5)
+    elif line_style == 2:
+        best_idx = z_vals.argmax()
+        best_x = param_vals[best_idx]
+        best_y = y_vals[best_idx]
+        ax.axvline(best_x, color='red', linestyle='-', linewidth=1.5)
+        ax.axhline(best_y, color='red', linestyle='-', linewidth=1.5)
 
     # Format the parameter name and title for display (e.g., convert "gamma_1" → "$\gamma_{1}$")
     ax.set_title(title, fontsize=font_scale * 14, fontweight="bold", pad=title_pad)
