@@ -1,7 +1,9 @@
 /data/
 /results/
 /.idea/
-/wandb/
+*/wandb/
+*/plots/
 /__pycache__/
-*.pth
 wandb_key.txt
+*.pth
+*.pdf

@@ -1,13 +1,13 @@
 import torch
 
-import Metrics
-from Classifier import Classifier
-from KMeans import KMeans
+import metrics
+from classifier import Classifier
+from kmeans import KMeans
 
 
 class MLPClassifier(Classifier):
-    def __init__(self, model, n_store=50, selection_method='random', metric_kmeans=Metrics.EuclideanMetric(), *args,
-                 **kwargs):
+    def __init__(self, model, n_store=50, selection_method='random', metric_kmeans=metrics.EuclideanMetric(),
+                 *args, **kwargs):
         """
         Initializes the MLPClassifier.
 

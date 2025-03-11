@@ -90,45 +90,53 @@ class MahalanobisMetric(Metric):
         self.gamma_1 = gamma_1
         self.gamma_2 = gamma_2
         self.normalization = normalization
-        self.is_first_preprocess = True
+        self.inv_cov_matrix = torch.tensor([])
         self.config = {'shrinkage': shrinkage, 'gamma_1': gamma_1, 'gamma_2': gamma_2, 'normalization': normalization}
 
     def preprocess(self, D):
         """
         Preprocess the dataset to calculate and store the inverse covariance matrix.
-        It can be called multiple times (is_first_preprocess=True only on the first call).
-        On each call, the inverse covariance matrix is calculated for the new data
-        and concatenated with the previous matrix.
+        It can be called multiple times, on each call, the inverse covariance matrix is calculated
+        for the new data and concatenated with the previous matrix.
 
         Parameters:
-         - D (torch.Tensor): Dataset tensor of shape [n_classes, samples_per_class, n_features].
-                             In subsequent calls, the samples_per_class and n_features dimensions
-                             must match the initial call.
+         - D (torch.Tensor): Dataset tensor of shape [n_classes, samples_per_class, n_features]
+                             It can also be a list of tensors of shape [n_samples, n_features].
         """
-        if self.is_first_preprocess:
-            # First preprocess call: initialize parameters and calculate the inverse covariance matrix
-            self.is_first_preprocess = False
-            self.n_classes = D.size(0)
-            self.samples_per_class = D.size(1)
-            self.n_features = D.size(2)
-            self.inv_cov_matrix = self.compute_inv_cov_matrix(D)
-        else:
-            # Subsequent calls: add new classes to the existing inverse covariance matrix
-            self.n_classes += D.size(0)
-            task_inv_cov_matrix = self.compute_inv_cov_matrix(D)
-            # Concatenating new class covariance matrices along the first dimension (class axis)
-            self.inv_cov_matrix = torch.concat((self.inv_cov_matrix, task_inv_cov_matrix), dim=0)
+        # Initialize parameters and calculate the inverse covariance matrix
+        self.n_features = D[0].size(-1)
+        self.device = D[0].device
+        task_inv_cov_matrix = self.compute_inv_cov_matrix(D)
 
-    def cov_matrix_shrinkage(self, D, cov_matrix):
+        # Concatenate new class covariance matrices along the first dimension (class axis)
+        self.inv_cov_matrix = torch.concat((self.inv_cov_matrix.to(self.device), task_inv_cov_matrix), dim=0)
+
+    def compute_inv_cov_matrix(self, D):
+        """ Compute the covariance matrix and its inverse for each class. """
+        cov_matrix = torch.stack([torch.cov(d.T) for d in D])
+
+        if self.shrinkage:
+            cov_matrix = self.cov_matrix_shrinkage(cov_matrix, len(D))
+            if self.shrinkage == 2:
+                cov_matrix = self.cov_matrix_shrinkage(cov_matrix, len(D))
+
+        if self.normalization:
+            self.cov_matrix = cov_matrix
+            cov_matrix = self.cov_matrix_normalization(cov_matrix)
+
+        # Return the inverse of the covariance matrix (of shape [n_classes, n_features, n_features])
+        return torch.linalg.pinv(cov_matrix)
+
+    def cov_matrix_shrinkage(self, cov_matrix, n_classes):
         """ Apply shrinkage to the covariance matrix based on gamma_1 and gamma_2. """
         diag = cov_matrix.diagonal(dim1=1, dim2=2)
 
         # V1: Mean of the diagonal elements (variance) for each class
-        V1 = diag.mean(1).reshape(-1, 1, 1).to(D.device)
+        V1 = diag.mean(1).reshape(-1, 1, 1).to(self.device)
         # V2: Mean of the off-diagonal elements (covariances) for each class
         V2 = ((cov_matrix.sum((1, 2)) - diag.sum(1)) / (self.n_features * (self.n_features - 1))).reshape(-1, 1, 1)
         # Id: Identity matrix repeated for each class
-        Id = torch.eye(self.n_features).repeat(D.size(0), 1, 1).to(D.device)
+        Id = torch.eye(self.n_features).repeat(n_classes, 1, 1).to(self.device)
 
         # Apply shrinkage to diagonal (using V1 and gamma_1) and off-diagonal (using V2 and gamma_2)
         return cov_matrix + self.gamma_1 * V1 * Id + self.gamma_2 * V2 * (1 - Id)
@@ -137,23 +145,6 @@ class MahalanobisMetric(Metric):
         """ Normalize the covariance matrix based on standard deviations. """
         stds = torch.sqrt(self.cov_matrix.diagonal(dim1=1, dim2=2))
         return cov_matrix / torch.einsum('bi,bj->bij', stds, stds)
-
-    def compute_inv_cov_matrix(self, D):
-        """ Compute the covariance matrix and its inverse for each class. """
-        cov_matrix = D - torch.mean(D, dim=1, keepdim=True)
-        cov_matrix = torch.matmul(cov_matrix.transpose(1, 2), cov_matrix) / self.n_features
-
-        if self.shrinkage:
-            cov_matrix = self.cov_matrix_shrinkage(D, cov_matrix)
-            if self.shrinkage == 2:
-                cov_matrix = self.cov_matrix_shrinkage(D, cov_matrix)
-
-        if self.normalization:
-            self.cov_matrix = cov_matrix
-            cov_matrix = self.cov_matrix_normalization(cov_matrix)
-
-        # Return the inverse of the covariance matrix (of shape [n_classes, n_features, n_features])
-        return torch.linalg.pinv(cov_matrix)
 
     def calculate(self, a, b):
         """

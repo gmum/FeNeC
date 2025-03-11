@@ -1,10 +1,10 @@
 import torch
 
-import Metrics
+import metrics
 
 
 class KMeans:
-    def __init__(self, n_clusters, max_iter=100, tol=0, metric=Metrics.EuclideanMetric(), seed=42):
+    def __init__(self, n_clusters, max_iter=100, tol=0, metric=metrics.EuclideanMetric(), seed=42):
         """
         Initialize KMeans clustering algorithm.
 
@@ -25,7 +25,7 @@ class KMeans:
     def metric_preprocess(self, D):
         """ Preprocess metric: currently only used for Mahalanobis Metric """
         # We save the data for later (fit_predict method) and will preprocess the metric there
-        self.D_preprocess = D.detach().clone()
+        self.D_preprocess = [d.detach().clone() for d in D]
 
     def kmeans_plusplus(self, D):
         """
@@ -77,7 +77,7 @@ class KMeans:
         # Iterate over each class to calculate the centroids
         for d_class in range(D.size(0)):
             # Preprocessing the metric on the current class (used in the case of Mahalanobis Distance for KMeans)
-            if isinstance(self.metric, Metrics.MahalanobisMetric):
+            if isinstance(self.metric, metrics.MahalanobisMetric):
                 self.metric.preprocess(self.D_preprocess[d_class:d_class + 1])
 
             # Perform iterations up to max_iter (though it is usually less because of self.tol)

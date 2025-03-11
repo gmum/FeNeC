@@ -5,19 +5,19 @@ import torch
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support as score
 
-import Metrics
-from KMeans import KMeans
+from kmeans import KMeans
+from metrics import MahalanobisMetric
 
 
 class Classifier(abc.ABC):
-    def __init__(self, metric, is_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=8,
+    def __init__(self, metric, data_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=8,
                  config_arguments=None, *args, **kwargs):
         """
         Initializes the Classifier.
 
         Parameters:
          - metric (Metric): The distance metric to be used.
-         - is_normalization (bool): Indicates whether data normalization should be applied.
+         - data_normalization (bool): Indicates whether data normalization should be applied.
          - tukey_lambda (float): Lambda value for Tukey’s Ladder of Powers transformation.
          - kmeans (KMeans): Optional KMeans object for clustering, if used.
          - device (str): Device on which computations are performed ('cpu' or 'cuda').
@@ -25,42 +25,36 @@ class Classifier(abc.ABC):
          - config_arguments (dict): Additional configuration parameters from the inherited class for wandb config.
         """
         self.metric = metric
-        self.is_normalization = is_normalization
+        self.data_normalization = data_normalization
         self.tukey_lambda = tukey_lambda
         self.kmeans = kmeans
         self.device = device
         self.batch_size = batch_size
-        self.is_first_fit = True
+        self.D_centroids = torch.tensor([], device=device)
 
         # Configure wandb with local and keyword arguments of valid types.
         self.config = {key: value for key, value in {**locals(), **kwargs, **config_arguments}.items() if
                        isinstance(value, (str, int, float, bool))}
         if isinstance(self.kmeans, KMeans):
             self.config.update(self.kmeans.get_config())
-        if isinstance(self.metric, Metrics.MahalanobisMetric):
+        if isinstance(self.metric, MahalanobisMetric):
             self.config.update(self.metric.get_config())
-
-    def apply_tukey(self, T):
-        """ Applies Tukey’s Ladder of Powers transformation to the tensor T. """
-        if self.tukey_lambda != 0:
-            return torch.pow(T, self.tukey_lambda)
-        else:
-            return torch.log(T)
 
     def fit(self, D, **kwargs):
         """
-        Fits the model to the training data.
-        It can be called multiple times (is_first_fit=True only on the first call).
-        On each call, the new data (new classes) is processed and concatenated with the old one.
+        Fits the model to the training data. It can be called multiple times. On each call, the new data
+        (new classes) is processed and concatenated with the old one.
 
         Parameters:
          - D (torch.Tensor): Training data tensor of shape [n_classes, samples_per_class, n_features].
-                             In subsequent calls, the samples_per_class and n_features dimensions
-                             must match the initial call.
+                             It can also be a list of tensors if the number of samples per class isn't equal.
         """
-        if D.ndim == 2:
-            D = D.unsqueeze(0)  # Ensure data has the correct shape.
-        D = D.type(torch.float32).to(self.device)
+        if torch.is_tensor(D):
+            if D.ndim == 2:
+                D = D.unsqueeze(0)  # Ensure data has the correct shape.
+            D = D.type(torch.float32).to(self.device)
+        else:
+            D = [d.type(torch.float32).to(self.device) for d in D]
 
         # Process the data:
         # self.D stores only the current task's data, with Tukey transformation applied.
@@ -70,39 +64,37 @@ class Classifier(abc.ABC):
         #  and optional normalization applied. It will be used during prediction.
         #  shape: [n_classes (across all tasks), n_centroids, n_features]
 
-        D_centroids = D.clone()  # Clone the data, so that we can perform clustering without Tukey applied
+        if torch.is_tensor(D):
+            D_centroids = D.clone()  # Clone the data, so that we can perform clustering without Tukey applied
+        else:
+            D_centroids = [d.clone() for d in D]
 
-        self.D = self.apply_tukey(D)  # Apply Tukey transformation to current task data.
-        self.metric.preprocess(self.D)  # Preprocess for the distance metric.
+        # Apply Tukey transformation to current task data and preprocess for the distance metric.
+        self.D = self.apply_tukey(D)
+        self.metric.preprocess(self.D)
 
         if self.kmeans is not None:
             if isinstance(self.kmeans, KMeans):  # If it's the custom implementation of KMeans:
                 self.kmeans.metric_preprocess(self.D)  # Preprocess data for KMeans metric (used for Mahalanobis).
-                D_centroids = self.kmeans.fit_predict(D_centroids)  # Perform KMeans clustering.
+                if torch.is_tensor(D):
+                    D_centroids = self.kmeans.fit_predict(D_centroids)  # Perform KMeans clustering.
+                else:
+                    D_centroids = torch.cat([self.kmeans.fit_predict(d.unsqueeze(0)) for d in D])
             else:  # Otherwise, if using sklearn's implementation:
                 # Perform KMeans clustering for each class separately and stack the results into a tensor.
-                D_centroids = torch.stack([torch.tensor(self.kmeans.fit(d_class).cluster_centers_).to(self.device)
-                                           for d_class in D_centroids.cpu().numpy()])
+                D_centroids = torch.stack([torch.tensor(self.kmeans.fit(d_class.cpu().numpy()).cluster_centers_)
+                                          .to(self.device) for d_class in D_centroids])
                 if self.tukey_lambda != 1:
                     D_centroids = torch.clip(D_centroids, min=0)
 
         D_centroids = self.apply_tukey(D_centroids)  # Apply Tukey transformation to centroids.
-        if self.is_normalization:
-            D_centroids = self.data_normalization(D_centroids)  # Normalize centroids if normalization is enabled.
+        if self.data_normalization:
+            # Normalize centroids if normalization is enabled.
+            D_centroids = self.normalize_data(D_centroids)
+            self.D = self.normalize_data(self.D)  # Normalize the data if normalization is enabled.
 
-        if self.is_normalization:
-            self.D = self.data_normalization(self.D)  # Normalize the data if normalization is enabled.
-
-        if self.is_first_fit:
-            # On the first call: initialize parameters and store data
-            self.is_first_fit = False
-            self.D_centroids = D_centroids
-            self.samples_per_class = D.size(1)
-            self.n_features = D.size(2)
-        else:
-            # On subsequent calls: concatenate new centroids with existing data
-            self.D_centroids = torch.concat((self.D_centroids, D_centroids))
-        self.n_classes = self.D_centroids.size(0)
+        self.D_centroids = torch.concat((self.D_centroids, D_centroids))
+        self.n_classes = len(self.D_centroids)
 
         return self
 
@@ -131,8 +123,8 @@ class Classifier(abc.ABC):
         """
         # Process the test data
         X = self.apply_tukey(X)
-        if self.is_normalization:
-            X = self.data_normalization(X)
+        if self.data_normalization:
+            X = self.normalize_data(X)
 
         return self.metric.calculate_batch(self.model_predict, self.D_centroids, X, self.batch_size)
 
@@ -143,21 +135,37 @@ class Classifier(abc.ABC):
         """
         return self.config
 
-    @staticmethod
-    def data_normalization(T, epsilon=1e-8):
-        """ Normalizes the data tensor T """
-        if T.ndim == 3:
-            # Normalize class-based data (3D tensor)
-            T_permuted = T.permute(0, 2, 1)
-            norm = torch.linalg.norm(T_permuted, dim=1, ord=2, keepdim=True)
-            representation = T_permuted / (norm + epsilon)
-            return representation.permute(0, 2, 1)
+    def apply_tukey(self, T):
+        """ Applies Tukey’s Ladder of Powers transformation to the tensor T. """
+        if torch.is_tensor(T):
+            if self.tukey_lambda != 0:
+                return torch.pow(T, self.tukey_lambda)
+            else:
+                return torch.log(T)
         else:
-            # Normalize sample-based data (2D tensor)
-            T_permuted = T.T
-            norm = torch.linalg.norm(T_permuted, dim=0, ord=2, keepdim=True)
-            representation = T_permuted / (norm + epsilon)
-            return representation.T
+            if self.tukey_lambda != 0:
+                return [torch.pow(t, self.tukey_lambda) for t in T]
+            else:
+                return [torch.log(t) for t in T]
+
+    @staticmethod
+    def normalize_data(T, epsilon=1e-8):
+        """ Normalizes the data tensor T """
+        if torch.is_tensor(T):
+            if T.ndim == 3:
+                # Normalize class-based data (3D tensor)
+                T_permuted = T.permute(0, 2, 1)
+                norm = torch.linalg.norm(T_permuted, dim=1, ord=2, keepdim=True)
+                representation = T_permuted / (norm + epsilon)
+                return representation.permute(0, 2, 1)
+            else:
+                # Normalize sample-based data (2D tensor)
+                T_permuted = T.T
+                norm = torch.linalg.norm(T_permuted, dim=0, ord=2, keepdim=True)
+                representation = T_permuted / (norm + epsilon)
+                return representation.T
+        else:
+            return [Classifier.normalize_data(t) for t in T]
 
     @staticmethod
     def getD(X, y):

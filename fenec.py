@@ -1,12 +1,12 @@
 import torch
 
-from Classifier import Classifier
+from classifier import Classifier
 
 
-class KNNClassifier(Classifier):
+class FeNeC(Classifier):
     def __init__(self, n_neighbors, *args, **kwargs):
         """
-        Initializes the K-Nearest Neighbors (KNN) Classifier.
+        Initializes FeNeC.
 
         Parameters:
          - n_neighbors (int): Number of nearest neighbors to consider for classification.

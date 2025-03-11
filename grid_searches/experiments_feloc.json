@@ -1,0 +1,345 @@
+{
+  "ViT_CIFAR": {
+    "n_tasks": 10,
+    "verbose": 0,
+    "n_runs": 5,
+    "study_name": "FeLoC_Experiments",
+    "model_type": "FeLoC",
+    "data_paths": [
+      "/shared/sets/datasets/ViT_CIFAR/seed_1993",
+      "/shared/sets/datasets/ViT_CIFAR/seed_1994",
+      "/shared/sets/datasets/ViT_CIFAR/seed_1995"
+    ],
+    "hyperparameters": {
+      "gamma_1": [
+        6.951,
+        8.192,
+        7.410,
+        8.880,
+        6.368
+      ],
+      "gamma_2": [
+        6.304,
+        14.050,
+        14.797,
+        12.061,
+        7.671
+      ],
+      "shrinkage": 1,
+      "metric_normalization": true,
+      "n_clusters": [
+        55,
+        60,
+        66,
+        50,
+        55
+      ],
+      "data_normalization": false,
+      "tukey_lambda": 1,
+      "batch_size": 16,
+      "optimizer": "SGD",
+      "n_points": [
+        2,
+        3,
+        2,
+        3,
+        5
+      ],
+      "mode": 0,
+      "num_epochs": 1000,
+      "lr": [
+        0.00047,
+        0.00488,
+        0.00315,
+        0.00333,
+        0.00575
+      ],
+      "early_stop_patience": 10,
+      "reg_type": 0,
+      "reg_lambda": 0,
+      "normalization_type": null,
+      "tanh_x": null,
+      "centroids_new_old_ratio": null,
+      "train_only_on_first_task": true,
+      "dataloader_batch_size": 64
+    }
+  },
+  "ResNet_CIFAR": {
+    "n_tasks": 6,
+    "verbose": 0,
+    "n_runs": 5,
+    "study_name": "FeLoC_Experiments",
+    "model_type": "FeLoC",
+    "data_paths": [
+      "/shared/sets/datasets/ResNet_CIFAR/seed_1993",
+      "/shared/sets/datasets/ResNet_CIFAR/seed_1994",
+      "/shared/sets/datasets/ResNet_CIFAR/seed_1995"
+    ],
+    "hyperparameters": {
+      "gamma_1": [
+        0.851,
+        1.081,
+        1.157,
+        0.811,
+        1.190
+      ],
+      "gamma_2": [
+        1.388,
+        2.354,
+        1.920,
+        1.146,
+        1.837
+      ],
+      "shrinkage": 2,
+      "metric_normalization": true,
+      "n_clusters": [
+        74,
+        69,
+        45,
+        46,
+        50
+      ],
+      "data_normalization": true,
+      "tukey_lambda": [
+        0.388,
+        0.359,
+        0.379,
+        0.345,
+        0.355
+      ],
+      "batch_size": 16,
+      "optimizer": "SGD",
+      "n_points": [
+        2,
+        4,
+        2,
+        4,
+        3
+      ],
+      "mode": 0,
+      "num_epochs": 200,
+      "lr": [
+        0.363,
+        0.000491,
+        0.00377,
+        0.0241,
+        0.00382
+      ],
+      "early_stop_patience": 10,
+      "reg_type": 0,
+      "reg_lambda": 0,
+      "normalization_type": null,
+      "tanh_x": null,
+      "centroids_new_old_ratio": null,
+      "train_only_on_first_task": true,
+      "dataloader_batch_size": 64
+    }
+  },
+  "ImageNet-R": {
+    "n_tasks": 10,
+    "verbose": 0,
+    "n_runs": 5,
+    "study_name": "FeLoC_Experiments",
+    "model_type": "FeLoC",
+    "data_paths": [
+      "/shared/sets/datasets/ImageNet-R/seed_1993",
+      "/shared/sets/datasets/ImageNet-R/seed_1994",
+      "/shared/sets/datasets/ImageNet-R/seed_1995"
+    ],
+    "hyperparameters": {
+      "gamma_1": [
+        10.140,
+        11.172,
+        10.145,
+        10.028,
+        13.107
+      ],
+      "gamma_2": [
+        9.031,
+        8.339,
+        9.370,
+        8.109,
+        3.950
+      ],
+      "shrinkage": 1,
+      "metric_normalization": true,
+      "n_clusters": [
+        3,
+        4,
+        4,
+        8,
+        6
+      ],
+      "data_normalization": false,
+      "tukey_lambda": 1,
+      "batch_size": 16,
+      "optimizer": "SGD",
+      "n_points": [
+        3,
+        4,
+        3,
+        8,
+        6
+      ],
+      "mode": 0,
+      "num_epochs": 1000,
+      "lr": [
+        0.147,
+        0.097,
+        0.071,
+        0.063,
+        0.0039
+      ],
+      "early_stop_patience": 10,
+      "reg_type": 0,
+      "reg_lambda": 0,
+      "normalization_type": null,
+      "tanh_x": null,
+      "centroids_new_old_ratio": null,
+      "train_only_on_first_task": true,
+      "dataloader_batch_size": 64
+    }
+  },
+  "ImageNet-Subset": {
+    "n_tasks": 6,
+    "verbose": 0,
+    "n_runs": 5,
+    "study_name": "FeLoC_Experiments",
+    "model_type": "FeLoC",
+    "data_paths": [
+      "/shared/sets/datasets/ImageNet-Subset/FeCAM_seed_1993",
+      "/shared/sets/datasets/ImageNet-Subset/FeCAM_seed_1994",
+      "/shared/sets/datasets/ImageNet-Subset/FeCAM_seed_1995"
+    ],
+    "hyperparameters": {
+      "gamma_1": [
+        1.439,
+        0.840,
+        1.087,
+        1.169,
+        0.898
+      ],
+      "gamma_2": [
+        0.829,
+        0.511,
+        0.822,
+        0.512,
+        0.500
+      ],
+      "shrinkage": 2,
+      "metric_normalization": true,
+      "n_clusters": [
+        69,
+        72,
+        70,
+        72,
+        32
+      ],
+      "data_normalization": true,
+      "tukey_lambda": [
+        0.349,
+        0.385,
+        0.393,
+        0.389,
+        0.374
+      ],
+      "batch_size": 16,
+      "optimizer": "SGD",
+      "n_points": [
+        4,
+        8,
+        6,
+        2,
+        3
+      ],
+      "mode": 0,
+      "num_epochs": 200,
+      "lr": [
+        0.0401,
+        0.0370,
+        0.0297,
+        0.0320,
+        0.0551
+      ],
+      "early_stop_patience": 10,
+      "reg_type": 0,
+      "reg_lambda": 0,
+      "normalization_type": null,
+      "tanh_x": null,
+      "centroids_new_old_ratio": null,
+      "train_only_on_first_task": true,
+      "dataloader_batch_size": 64
+    }
+  },
+  "TinyImageNet": {
+    "n_tasks": 6,
+    "verbose": 0,
+    "n_runs": 5,
+    "study_name": "FeLoC_Experiments",
+    "model_type": "FeLoC",
+    "data_paths": [
+      "/shared/sets/datasets/TinyImageNet/1993",
+      "/shared/sets/datasets/TinyImageNet/1994",
+      "/shared/sets/datasets/TinyImageNet/1995"
+    ],
+    "hyperparameters": {
+      "gamma_1": [
+        1.085,
+        1.115,
+        1.154,
+        1.158,
+        1.022
+      ],
+      "gamma_2": [
+        1.176,
+        1.753,
+        1.947,
+        1.769,
+        1.184
+      ],
+      "shrinkage": 2,
+      "metric_normalization": true,
+      "n_clusters": [
+        18,
+        24,
+        24,
+        45,
+        19
+      ],
+      "data_normalization": true,
+      "tukey_lambda": [
+        0.454,
+        0.428,
+        0.451,
+        0.423,
+        0.424
+      ],
+      "batch_size": 16,
+      "optimizer": "SGD",
+      "n_points": [
+        4,
+        4,
+        6,
+        4,
+        3
+      ],
+      "mode": 0,
+      "num_epochs": 200,
+      "lr": [
+        0.273,
+        0.600,
+        0.336,
+        0.00460,
+        0.00964
+      ],
+      "early_stop_patience": 10,
+      "reg_type": 0,
+      "reg_lambda": 0,
+      "normalization_type": null,
+      "tanh_x": null,
+      "centroids_new_old_ratio": null,
+      "train_only_on_first_task": true,
+      "dataloader_batch_size": 64
+    }
+  }
+}
