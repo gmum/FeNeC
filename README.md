@@ -184,6 +184,11 @@ For experimentation, visualization, and debugging:
 
 **Krzysztof Pniaczek**: Led large-scale experiment execution, performance analysis, and hyperparameter optimization using Optuna. Integrated wandb for experiment tracking and visualization.
 
+# Alternative Implementation
+
+An independent implementation of FeNeC by Bartosz Trojan and Michał Karp is available at:
+https://github.com/btrojan-official/FeNeC
+
 # Cite
 
 If you use our code, please cite the following paper:
