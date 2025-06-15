@@ -4,6 +4,7 @@ import wandb
 from torch.utils.data import DataLoader, TensorDataset, ConcatDataset, random_split
 
 from classifier import Classifier
+from metrics import Metric
 
 
 class FeLoC(Classifier):
@@ -290,12 +291,21 @@ class FeLoC(Classifier):
         """
 
         # Calculate features for all points in the current task
-        X = torch.cat([self.metric.calculate_batch(
-            self.n_nearest_points,
-            self.D_centroids,
-            d_class,
-            self.batch_size)
-            for d_class in self.D])
+        if not self.covariance_per_centroid:
+            X = torch.cat([self.metric.calculate_batch(
+                self.n_nearest_points,
+                self.D_centroids,
+                d_class,
+                self.batch_size)
+                for d_class in self.D])
+        else:
+            X = torch.cat([Metric.calculate_batch_metrics(
+                self.metrics,
+                self.n_nearest_points,
+                self.D_centroids,
+                d_class,
+                self.batch_size)
+                for d_class in self.D])
         # X shape: [points in the current task, n_classes or classes in the current task, self.n_points]
 
         # Construct corresponding labels.

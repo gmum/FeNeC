@@ -51,7 +51,7 @@ class KMeans:
 
         return torch.stack(centroids, dim=1).squeeze(2)
 
-    def fit_predict(self, D, init='k-means++', seed=None):
+    def fit_predict(self, D, init='k-means++', seed=None, return_cluster_labels=False):
         """
         Initialize centroids either using k-means++ or randomly
 
@@ -59,6 +59,7 @@ class KMeans:
          - D (torch.Tensor): Dataset tensor of shape [n_classes, samples_per_class, n_features].
          - init (str): Initialization method ('k-means++' or 'random') for selecting initial centroids.
          - seed (int): Random seed for initialization. If provided, this overrides the global seed set in __init__.
+         - return_cluster_labels (bool): Whether to return cluster labels along with centroids.
 
         Returns:
          - torch.Tensor: Final centroids for each class of shape [n_classes, n_clusters, n_features].
@@ -73,6 +74,8 @@ class KMeans:
         else:  # init == 'random'
             random_indices = torch.randperm(D.size(1))[:self.n_clusters]
             centroids = D[:, random_indices]
+
+        all_labels = []
 
         # Iterate over each class to calculate the centroids
         for d_class in range(D.size(0)):
@@ -103,7 +106,11 @@ class KMeans:
                 # Update centroids for the next iteration
                 centroids[d_class] = new_centroids
 
+            all_labels.append(cluster_labels)
+
         # Return the final centroids
+        if return_cluster_labels:
+            return centroids, torch.stack(all_labels)
         return centroids
 
     def get_config(self):

@@ -54,6 +54,49 @@ class Metric(abc.ABC):
         # Concatenate all processed batches into a single tensor along the first dimension
         return torch.cat(res)
 
+    @staticmethod
+    def calculate_batch_metrics(metrics, fun, a, b, batch_size):
+        """
+        Calculates the batched distance between two tensors 'a' and 'b' using individual metrics per centroid,
+        and applies a function to the computed distances.
+
+        Parameters:
+         - metrics (list[list[Metric]]): Nested list where metrics[c][k] is the metric for class c, centroid k.
+         - fun (function): A function to apply to the computed distances.
+         - a (torch.Tensor): The first tensor of shape [n_classes, n_centroids, n_features].
+         - b (torch.Tensor): The second tensor [n_samples_b, n_features].
+         - batch_size (int): The batch size for tensor 'b'. If set to -1, it uses the full size of 'b'.
+
+        Returns:
+         - torch.Tensor: The results of the function 'fun' applied to the distances between 'a' and 'b'.
+        """
+        # Add a dimension so that it is of shape [1, n_classes, samples_per_class, n_features].
+        if a.ndim == 3:
+            a = a.unsqueeze(0)
+
+        _, n_classes, n_centroids, _ = a.shape
+
+        # Set batch size for 'b' to full size if specified as -1
+        if batch_size == -1:
+            batch_size = b.size(0)
+
+        res = []
+
+        for batch_b in b[:, None, None, :].split(batch_size, dim=0):
+            # Compute distances between each batch of 'a' and 'batch_B', then reshape
+            # Shape of distances: [batch_size, n_classes, n_centroids]
+            distances = torch.stack([
+                metrics[c][k].calculate(a[0, c, k].reshape(1, 1, 1, -1), batch_b).flatten()
+                if metrics[c][k] is not None else torch.full((batch_b.size(0),), float("inf"), device=b.device)
+                for c in range(n_classes) for k in range(n_centroids)
+            ], dim=1).view(batch_b.size(0), n_classes, n_centroids)
+
+            # Apply the function to the calculated distances and append to results list
+            res.append(fun(distances))
+
+        # Concatenate all processed batches into a single tensor along the first dimension
+        return torch.cat(res)
+
 
 class EuclideanMetric(Metric):
     """ Computes the Euclidean distance between tensors. """

@@ -1,4 +1,5 @@
 import abc
+import copy
 
 import pandas as pd
 import torch
@@ -6,12 +7,12 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support as score
 
 from kmeans import KMeans
-from metrics import MahalanobisMetric
+from metrics import Metric, MahalanobisMetric
 
 
 class Classifier(abc.ABC):
-    def __init__(self, metric, data_normalization=False, tukey_lambda=1., kmeans=None, device='cpu', batch_size=8,
-                 config_arguments=None, *args, **kwargs):
+    def __init__(self, metric, data_normalization=False, tukey_lambda=1., kmeans=None, covariance_per_centroid=True,
+                 device='cpu', batch_size=8, config_arguments=None, *args, **kwargs):
         """
         Initializes the Classifier.
 
@@ -20,14 +21,18 @@ class Classifier(abc.ABC):
          - data_normalization (bool): Indicates whether data normalization should be applied.
          - tukey_lambda (float): Lambda value for Tukey’s Ladder of Powers transformation.
          - kmeans (KMeans): Optional KMeans object for clustering, if used.
+         - covariance_per_centroid (bool): Indicates whether to use a separate covariance metrix per centroid.
+                                           It should only be used together with kmeans and Mahalanobis Metric.
          - device (str): Device on which computations are performed ('cpu' or 'cuda').
          - batch_size (int): Batch size for splitting test data. Used in prediction.
          - config_arguments (dict): Additional configuration parameters from the inherited class for wandb config.
         """
         self.metric = metric
+        self.metrics = []
         self.data_normalization = data_normalization
         self.tukey_lambda = tukey_lambda
         self.kmeans = kmeans
+        self.covariance_per_centroid = covariance_per_centroid
         self.device = device
         self.batch_size = batch_size
         self.D_centroids = torch.tensor([], device=device)
@@ -71,21 +76,55 @@ class Classifier(abc.ABC):
 
         # Apply Tukey transformation to current task data and preprocess for the distance metric.
         self.D = self.apply_tukey(D)
-        self.metric.preprocess(self.D)
+        if not self.covariance_per_centroid:
+            self.metric.preprocess(self.D)
 
         if self.kmeans is not None:
             if isinstance(self.kmeans, KMeans):  # If it's the custom implementation of KMeans:
                 self.kmeans.metric_preprocess(self.D)  # Preprocess data for KMeans metric (used for Mahalanobis).
-                if torch.is_tensor(D):
-                    D_centroids = self.kmeans.fit_predict(D_centroids)  # Perform KMeans clustering.
+                if torch.is_tensor(D):  # Perform KMeans clustering:
+                    D_centroids, cluster_labels = self.kmeans.fit_predict(D_centroids, return_cluster_labels=True)
                 else:
-                    D_centroids = torch.cat([self.kmeans.fit_predict(d.unsqueeze(0)) for d in D])
+                    all_centroids, all_labels = [], []
+                    for d in D:
+                        centroids, labels = self.kmeans.fit_predict(d.unsqueeze(0), return_cluster_labels=True)
+                        all_centroids.append(centroids)
+                        all_labels.append(labels)
+                    D_centroids = torch.cat(all_centroids)
+                    cluster_labels = torch.cat(all_labels)
+
             else:  # Otherwise, if using sklearn's implementation:
                 # Perform KMeans clustering for each class separately and stack the results into a tensor.
-                D_centroids = torch.stack([torch.tensor(self.kmeans.fit(d_class.cpu().numpy()).cluster_centers_)
-                                          .to(self.device) for d_class in D_centroids])
+                all_centroids, all_labels = [], []
+                for d_class in D_centroids:
+                    kmeans_result = self.kmeans.fit(d_class.cpu().numpy())
+                    all_centroids.append(torch.tensor(kmeans_result.cluster_centers_).to(self.device))
+                    all_labels.append(torch.tensor(kmeans_result.labels_).to(self.device))
+                D_centroids = torch.stack(all_centroids)
+                cluster_labels = torch.stack(all_labels)
+
                 if self.tukey_lambda != 1:
                     D_centroids = torch.clip(D_centroids, min=0)
+
+            # If covariance per centroid is enabled, compute Mahalanobis metrics per centroid cluster.
+            if self.covariance_per_centroid:
+                metrics = []
+                # Iterate over original data batches and corresponding cluster labels.
+                for data, labels in zip(self.D, cluster_labels):
+                    # Group data points by their assigned centroid cluster.
+                    clustered_data = [data[labels == i] for i in range(D_centroids.size(1))]
+                    class_metrics = []
+                    for centroid_data in clustered_data:
+                        if len(centroid_data) <= 3:
+                            # Not enough points to estimate covariance reliably; skip metric computation.
+                            class_metrics.append(None)
+                        else:
+                            # Deepcopy metric instance and preprocess data subset for covariance estimation.
+                            temp_metric = copy.deepcopy(self.metric)
+                            temp_metric.preprocess(centroid_data.unsqueeze(0))
+                            class_metrics.append(temp_metric)
+                    metrics.append(class_metrics)
+                self.metrics += metrics
 
         D_centroids = self.apply_tukey(D_centroids)  # Apply Tukey transformation to centroids.
         if self.data_normalization:
@@ -126,7 +165,14 @@ class Classifier(abc.ABC):
         if self.data_normalization:
             X = self.normalize_data(X)
 
-        return self.metric.calculate_batch(self.model_predict, self.D_centroids, X, self.batch_size)
+        if not self.covariance_per_centroid:
+            # Compute distances using the standard metric on all centroids collectively
+            return self.metric.calculate_batch(self.model_predict, self.D_centroids, X, self.batch_size)
+        else:
+            # Compute distances using Mahalanobis metric with covariance matrices
+            #  computed separately for each class/centroid cluster
+            return Metric.calculate_batch_metrics(self.metrics, self.model_predict, self.D_centroids, X,
+                                                  self.batch_size)
 
     def get_config(self):
         """
