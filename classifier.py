@@ -91,7 +91,7 @@ class Classifier(abc.ABC):
                         all_centroids.append(centroids)
                         all_labels.append(labels)
                     D_centroids = torch.cat(all_centroids)
-                    cluster_labels = torch.cat(all_labels)
+                    cluster_labels = [label.flatten() for label in all_labels]
 
             else:  # Otherwise, if using sklearn's implementation:
                 # Perform KMeans clustering for each class separately and stack the results into a tensor.
@@ -101,7 +101,7 @@ class Classifier(abc.ABC):
                     all_centroids.append(torch.tensor(kmeans_result.cluster_centers_).to(self.device))
                     all_labels.append(torch.tensor(kmeans_result.labels_).to(self.device))
                 D_centroids = torch.stack(all_centroids)
-                cluster_labels = torch.stack(all_labels)
+                cluster_labels = all_labels
 
                 if self.tukey_lambda != 1:
                     D_centroids = torch.clip(D_centroids, min=0)
