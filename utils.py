@@ -217,15 +217,15 @@ def plot_accuracy_trials(study_name, path='./results/', ylim=True):
     plt.title('Accuracy over trials')
     plt.show()
 
-
 def plot_acc_param_hue(dataf, x_name, y_name, hue_name, ylim=True, ylim_set=None, xlim_set=None, only_later=None,
                        fig_size=(10, 6), font_scale=1.5, path_to_pdf=None, title_pad=None, label_pad=None, line_style=0,
-                       palette='viridis', show_bar=True, s_plot=50, alpha_plot=0.6, bar_lim=(None, None)):
+                       palette='viridis', show_bar=True, s_plot=50, alpha_plot=0.6, bar_lim=(None, None),
+                       best_trial_number=None):
     """
     Create a Seaborn scatter plot of accuracy vs. a given parameter.
 
     Parameters:
-     - dataf (DataFrame): The dataset with the grid search results
+     - dataf (DataFrame): The dataset with the grid search results. Must include a 'number' column for best_trial_number.
      - x_name (str): The name of the x parameter (e.g., "gamma_1").
      - y_name (str): The name of the y parameter (e.g., "accuracy").
      - hue_name (str): The name of the parameter used for colors (e.g., "n_clusters").
@@ -238,12 +238,13 @@ def plot_acc_param_hue(dataf, x_name, y_name, hue_name, ylim=True, ylim_set=None
      - path_to_pdf (str): If not None, the plot will be saved to the given file path in PDF format.
      - title_pad (int): Padding around the title to make the plots consistent.
      - label_pad (int): Padding around the x label to make the plots consistent.
-     - line_style (int): What line style to use to visualize the best accuracy (0/1/2)
+     - line_style (int): What line style to use to visualize the best accuracy (0/1/2). This is ignored if best_trial_number is set.
      - palette (str): The color palette to use.
      - show_bar (bool): Whether to show the bar.
      - s_plot (float): The size of the dots in the scatterplot.
      - alpha_plot (float): The alpha of the dots in the scatterplot.
      - bar_lim (tuple of float): If not None, set it as the bar limits.
+     - best_trial_number (int, optional): If not None, draws a vertical line at the x-value of the specified trial number. Defaults to None.
     """
     dataf['params_accuracy'] = dataf['value']
     param_vals = dataf[f'params_{x_name}'].values
@@ -302,7 +303,32 @@ def plot_acc_param_hue(dataf, x_name, y_name, hue_name, ylim=True, ylim_set=None
         ax=ax
     )
 
-    if line_style == 1:
+    # *** MODIFIED SECTION START ***
+    # Draw a line for a specific trial number if provided
+    if best_trial_number is not None:
+        # Find the row for the best trial number in the original dataframe
+        best_trial_row = dataf[dataf['number'] == best_trial_number]
+        if not best_trial_row.empty:
+            # Get the x-value for that trial from the corresponding parameter column
+            if line_style == 1:
+                best_x = best_trial_row[f'params_{x_name}'].iloc[0]
+                # Draw a distinct vertical line
+                ax.axvline(best_x, color='red', linestyle='-', linewidth=1.5)
+                ax.legend()
+            elif line_style == 2:
+                best_x = best_trial_row[f'params_{x_name}'].iloc[0]
+                best_y = best_trial_row[f'params_{y_name}'].iloc[0]
+                # Draw a distinct vertical line
+                ax.axvline(best_x, color='red', linestyle='-', linewidth=1.5)
+                ax.axhline(best_y, color='red', linestyle='-', linewidth=1.5)
+                ax.legend()
+
+        else:
+            # Print a warning if the trial number is not found
+            print(f"Warning: Trial number {best_trial_number} not found in the dataframe.")
+            
+    # Original line-drawing logic, now in an else block
+    elif line_style == 1:
         best_idx = y_vals.argmax()
         best_x = param_vals[best_idx]
         ax.axvline(best_x, color='red', linestyle='-', linewidth=1.5)
@@ -312,6 +338,7 @@ def plot_acc_param_hue(dataf, x_name, y_name, hue_name, ylim=True, ylim_set=None
         best_y = y_vals[best_idx]
         ax.axvline(best_x, color='red', linestyle='-', linewidth=1.5)
         ax.axhline(best_y, color='red', linestyle='-', linewidth=1.5)
+    # *** MODIFIED SECTION END ***
 
     # Format the parameter name and title for display (e.g., convert "gamma_1" → "$\gamma_{1}$")
     ax.set_title(title, fontsize=font_scale * 14, fontweight="bold", pad=title_pad)
@@ -337,7 +364,6 @@ def plot_acc_param_hue(dataf, x_name, y_name, hue_name, ylim=True, ylim_set=None
 
     if ax is None:
         plt.show()  # Display the plot
-
 
 def plot_param_accuracy(param_name, param_vals, accuracies, ylim=True, ylim_set=None, xlim_set=None,
                         only_later=None, fig_size=(10, 6), font_scale=1.5, path_to_pdf=None, title=None,
